@@ -4,7 +4,7 @@
 // stale-while-revalidate and serves a cached copy immediately, catching up to
 // new JSON on the NEXT load. A returning student would otherwise run the old
 // engine against new content.
-const CACHE_NAME = 'coauthor-shell-v191';
+const CACHE_NAME = 'coauthor-shell-v192';
 // Bumped alongside CACHE_NAME here: catalog.json removal changed
 // HomeDashboard.js/TestDashboard.js's fetch behavior, but stale-while-
 // revalidate (see staleWhileRevalidate() below) serves whatever's already
@@ -428,7 +428,11 @@ self.addEventListener('fetch', (event) => {
   // correct: an `<img>`'s default `no-cors` request yields an opaque
   // response (status/ok unreadable here), which is still perfectly
   // cacheable, just not something to branch logic on.
-  if (url.origin !== self.location.origin && event.request.method === 'GET') {
+  // Also covers course repos served from this SAME origin but outside this
+  // app's own path (GitHub Pages: coauthor-ed.github.io/coauthor/ is the app,
+  // coauthor-ed.github.io/cbse-grade9-science/ is a course). Without this a
+  // course's lessons were never cached and could not open offline.
+  if ((url.origin !== self.location.origin || !url.pathname.startsWith(BASE)) && event.request.method === 'GET') {
     event.respondWith(staleWhileRevalidate(event.request, ASSET_CACHE));
     return;
   }

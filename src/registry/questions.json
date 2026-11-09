@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "_note": "Canonical registry is at /registry/questions.json — this file kept for backward compat. Both point to same plugin paths.",
+  "questions": {
+    "mcq-single@2":             "/src/plugins/questions/mcq-single/v2/index.js",
+    "numeric-value@1":          "/src/plugins/questions/numeric-value/v1/index.js",
+    "fuzzy-descriptive@1":      "/src/plugins/questions/fuzzy-descriptive/v1/index.js",
+    "molecule-drag-match@1":    "/src/plugins/questions/molecule-drag-match/v1/index.js",
+    "equation-input@1":         "/src/plugins/questions/equation-input/v1/index.js",
+    "diagram-hotspot@1":        "/src/plugins/questions/diagram-hotspot/v1/index.js",
+    "sequence-order@1":         "/src/plugins/questions/sequence-order/v1/index.js",
+    "match-categorize@1":       "/src/plugins/questions/match-categorize/v1/index.js",
+    "fill-blank@1":             "/src/plugins/questions/fill-blank/v1/index.js",
+    "statement-judgment@1":     "/src/plugins/questions/statement-judgment/v1/index.js",
+    "structured-descriptive@1": "/src/plugins/questions/structured-descriptive/v1/index.js"
+  }
+}

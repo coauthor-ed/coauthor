@@ -1,0 +1,21 @@
+{
+  "id": "showcase-guide-predict",
+  "type": "mcq-single@2",
+  "subject": "science",
+  "grade": 9,
+  "difficulty": "easy",
+  "stem": { "en": "Someone opens a bottle of perfume in one corner of a closed room. No fan is on. What do you think happens next?" },
+  "options": [
+    { "id": "a", "text": { "en": "The smell stays in that corner, because nothing pushes it." }, "isCorrect": false,
+      "feedback": { "en": "Good guess, but the particles are never still. They keep moving even when no fan pushes them." } },
+    { "id": "b", "text": { "en": "The smell slowly spreads until the whole room smells of it." }, "isCorrect": true },
+    { "id": "c", "text": { "en": "The smell rises to the ceiling and stays there." }, "isCorrect": false,
+      "feedback": { "en": "The particles move in every direction, not only upwards. So the smell reaches the floor too." } }
+  ],
+  "correctOptionId": "b",
+  "explanation": { "en": "The perfume particles keep moving and bumping into air particles. Slowly they spread from where there are many of them to where there are few. This spreading is called **diffusion**." },
+  "hints": [
+    { "en": "Are the perfume particles still, or moving?" },
+    { "en": "Moving particles bump into air particles and change direction many times." }
+  ]
+}

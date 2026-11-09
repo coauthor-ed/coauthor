@@ -1,0 +1,13 @@
+{
+  "id": "showcase-arcade-catch",
+  "type": "content-block@1",
+  "markdown": {
+    "en": "Catch every fish that is the same amount as the sign."
+  },
+  "simulation": {
+    "src": "simulations/QuillCatchScene.js",
+    "position": "below",
+    "fullWidth": true,
+    "frame": "none"
+  }
+}

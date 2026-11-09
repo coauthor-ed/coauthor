@@ -1,0 +1,11 @@
+{
+  "id": "showcase-story-preview",
+  "type": "content-block@1",
+  "markdown": {
+    "en": "## Why does perfume spread across a room?\n\nOpen a bottle of perfume in one corner, and soon the whole room smells of it.\n\nThe perfume particles keep moving and bumping into air particles. Slowly they spread from where there are many of them to where there are few.\n\nThis spreading is called **diffusion**."
+  },
+  "simulation": {
+    "src": "/src/simulations/biology/DiffusionScene.js",
+    "position": "below"
+  }
+}

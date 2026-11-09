@@ -1,0 +1,7 @@
+{
+  "id": "showcase-maths-try",
+  "type": "equation-input@1",
+  "stem": "A pizza is cut into 8 equal slices. You eat 3. What fraction of the pizza did you eat? Type it as a fraction: press 3, then /, then 8.",
+  "expected": "\\frac{3}{8}",
+  "explanation": { "en": "3 slices out of 8 equal slices is 3/8 of the pizza." }
+}

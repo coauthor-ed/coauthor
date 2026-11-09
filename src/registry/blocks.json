@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "_note": "Canonical registry is at /registry/blocks.json — this file kept for backward compat. Both point to same plugin paths.",
+  "blocks": {
+    "text-block@1":      "/src/plugins/blocks/text-block/v1/index.js",
+    "content-block@1":   "/src/plugins/blocks/content-block/v1/index.js",
+    "poe-predict@1":     "/src/plugins/blocks/poe-predict/v1/index.js",
+    "poe-observe-sim@1": "/src/plugins/blocks/poe-observe-sim/v1/index.js",
+    "diagram-explore@1": "/src/plugins/blocks/diagram-explore/v1/index.js"
+  }
+}

@@ -1,0 +1,21 @@
+/* The app's two self-hosted faces, in one stylesheet so index.html needs a
+   single <link> before theme.css.
+
+   These were previously pulled from fonts.googleapis.com by an @import at the
+   top of src/ui/theme.css. That broke the offline promise of a PWA — with no
+   network the display face silently fell back to system-ui — and needed two
+   CDN hosts allowlisted in the CSP. Vendoring them locally removes both. */
+@import url('./nunito/nunito.css');
+@import url('./fredoka/fredoka.css');
+
+/* Maths operators the two faces lack (set symbols, angle, congruence). A stack
+   names this first; unicode-range keeps it off every other character, and a
+   glyph it lacks falls to the next family. kit/TapLight.js uses it. */
+@font-face {
+  font-family: 'Sim Math';
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url('./KaTeX_Main-Bold.woff2') format('woff2');
+  unicode-range: U+2200-22FF, U+25B3;
+}

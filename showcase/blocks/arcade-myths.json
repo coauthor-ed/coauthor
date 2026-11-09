@@ -1,0 +1,13 @@
+{
+  "id": "showcase-arcade-myths",
+  "type": "content-block@1",
+  "markdown": {
+    "en": "Is it a myth or a fact? A wrong call shows you the evidence."
+  },
+  "simulation": {
+    "src": "simulations/MythOrFactScene.js",
+    "position": "below",
+    "fullWidth": true,
+    "frame": "none"
+  }
+}

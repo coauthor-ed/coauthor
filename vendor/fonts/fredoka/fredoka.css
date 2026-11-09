@@ -1,0 +1,32 @@
+/* Self-hosted Fredoka (latin subset). Google's variable-font woff2 serves every
+   static weight below from the same file — see tools/vendor-setup.sh.
+   Fredoka is the student runtime's display face (--font-heading); Nunito is the
+   body face. Both are SIL OFL 1.1, so redistribution here is permitted. */
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Fredoka-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('./Fredoka-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./Fredoka-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Fredoka';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Fredoka-latin.woff2') format('woff2');
+}

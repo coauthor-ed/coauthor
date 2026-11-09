@@ -1,0 +1,145 @@
+/* Self-hosted Nunito (latin subset). Google's variable-font woff2 serves every
+   static weight below from the same file — see tools/vendor-setup.sh. */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Nunito-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./Nunito-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Nunito-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('./Nunito-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('./Nunito-latin.woff2') format('woff2');
+}
+/* Marks Nunito lacks (check, cross, arrows, stars, shapes). Subset of Noto Sans
+   Symbols 2 (SIL OFL 1.1), ~2 KB. Same family name + unicode-range, declared per weight (a face
+   covering a weight range loses to the exact-weight latin face), so any
+   font stack naming Nunito falls through to it for these code points only. */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Nunito-symbols.woff2') format('woff2');
+  unicode-range: U+2190, U+2192, U+2194, U+21BA-21BB, U+2605-2606, U+2610-2612, U+25A0-25FF, U+2713-2718, U+26A0, U+2B50;
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./Nunito-symbols.woff2') format('woff2');
+  unicode-range: U+2190, U+2192, U+2194, U+21BA-21BB, U+2605-2606, U+2610-2612, U+25A0-25FF, U+2713-2718, U+26A0, U+2B50;
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Nunito-symbols.woff2') format('woff2');
+  unicode-range: U+2190, U+2192, U+2194, U+21BA-21BB, U+2605-2606, U+2610-2612, U+25A0-25FF, U+2713-2718, U+26A0, U+2B50;
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('./Nunito-symbols.woff2') format('woff2');
+  unicode-range: U+2190, U+2192, U+2194, U+21BA-21BB, U+2605-2606, U+2610-2612, U+25A0-25FF, U+2713-2718, U+26A0, U+2B50;
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('./Nunito-symbols.woff2') format('woff2');
+  unicode-range: U+2190, U+2192, U+2194, U+21BA-21BB, U+2605-2606, U+2610-2612, U+25A0-25FF, U+2713-2718, U+26A0, U+2B50;
+}
+/* The rupee sign (U+20B9), which Nunito-latin.woff2 lacks: an empty box in
+   every price before this. Nunito's own glyph, a one-character subset of the
+   full Nunito variable font (SIL OFL 1.1, from Google Fonts with text=U+20B9,
+   1.5 KB, wght 200-1000). Same family + unicode-range pattern as the symbols
+   above, per weight. Every stack that names Nunito gets it, and so does
+   every stack that falls through to Nunito for a glyph it lacks (Fredoka,
+   Manrope, Dela Gothic One: none of the three has a rupee).
+   The same file also carries the superscripts Nunito-latin.woff2 lacks:
+   U+2070, U+2074-2079 (Nunito's own) and U+207A-207E (+ - = ( ), which
+   Nunito has no glyph for: composites of its plus/minus/equal/parens, scaled
+   onto the superscript digits; built 2026-11-09, 3.8 KB). */
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./Nunito-rupee.woff2') format('woff2');
+  unicode-range: U+20B9, U+2070, U+2074-207E;
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('./Nunito-rupee.woff2') format('woff2');
+  unicode-range: U+20B9, U+2070, U+2074-207E;
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./Nunito-rupee.woff2') format('woff2');
+  unicode-range: U+20B9, U+2070, U+2074-207E;
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('./Nunito-rupee.woff2') format('woff2');
+  unicode-range: U+20B9, U+2070, U+2074-207E;
+}
+@font-face {
+  font-family: 'Nunito';
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+  src: url('./Nunito-rupee.woff2') format('woff2');
+  unicode-range: U+20B9, U+2070, U+2074-207E;
+}
+/* The same rupee as a family of its own, for stacks that must not fall to
+   Nunito for anything else (monospace stacks: --fig-font-mono,
+   --sim-font-mono). Name it FIRST: unicode-range keeps it to these few
+   characters, and a system mono (Liberation Mono as 'Courier New') may map
+   U+20B9 to a placeholder box, which would stop the fallback before it. */
+@font-face {
+  font-family: 'Nunito Rupee';
+  font-style: normal;
+  font-weight: 200 1000;
+  font-display: swap;
+  src: url('./Nunito-rupee.woff2') format('woff2');
+  unicode-range: U+20B9, U+2070, U+2074-207E;
+}

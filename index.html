@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CoAuthor</title>
+  
+  <!--
+    script-src/connect-src/img-src/media-src carry `https:` so a
+    parent-added remote course source (CourseSourceManager — settings UI
+    under Parent Dashboard) can be fetched from and, for script-src, have
+    its own simulation JS dynamically import()ed. This is a deliberate,
+    knowingly-accepted security posture: a compromised/malicious added
+    source can run arbitrary code with this app's IndexedDB access,
+    mitigated by never adding unsafe-eval/unsafe-inline here and by the
+    settings UI requiring an explicit trust confirmation before addSource()
+    is ever called. A static CSP meta tag can't allowlist only the specific
+    origins a parent has added (no way to template it at runtime), so
+    "any https: origin" is the necessary consequence of allowing remote
+    sources at all, not an accidental widening.
+  -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'sha256-D3Hq2G/9c9Ebu411YNqoRqbzrHwrenK3ltuJkyIUdbg=' https:; connect-src 'self' https:; img-src 'self' data: https:; media-src 'self' https:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; font-src 'self'; object-src 'none'; base-uri 'self';">
+  
+  <link rel="icon" type="image/png" sizes="32x32" href="./assets/icons/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="256x256" href="./assets/icons/coauthor.png">
+  <link rel="apple-touch-icon" href="./assets/icons/apple-touch-icon.png">
+  <link rel="manifest" href="./manifest.webmanifest">
+  <meta name="theme-color" content="#fdfaff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d0a22" media="(prefers-color-scheme: dark)">
+  <link rel="stylesheet" href="./vendor/fonts/app-fonts.css">
+  <link rel="stylesheet" href="./src/ui/theme.css">
+  <link rel="stylesheet" href="./src/simulations/base/sim-theme.css">
+
+  <!-- CSP's script-src pins this exact block by sha256 (see the meta tag
+       above) instead of 'unsafe-inline' — editing so much as one character
+       here changes that hash and silently breaks every module import on
+       the page. Recompute it after any edit:
+       python3 -c "import re,hashlib,base64; html=open('index.html').read(); c=re.search(r'<script type=\"importmap\">(.*?)</script>', html, re.S).group(1); print(base64.b64encode(hashlib.sha256(c.encode()).digest()).decode())"
+       (Chromium's own CSP violation message also reports the exact hash it
+       expected, if this drifts again.) -->
+  <script type="importmap">
+    {
+      "imports": {
+        "lit": "./vendor/lit.js",
+        "idb": "./vendor/idb.js",
+        "core/": "./src/core/",
+        "registry/": "./src/registry/",
+        "blocks/": "./src/plugins/blocks/",
+        "questions/": "./src/plugins/questions/",
+        "simulations/base/": "./src/simulations/base/",
+        "vendor/": "./vendor/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <!-- Inline SVG Sprite for Icons -->
+  <svg style="display: none;" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <g id="icon-check"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></g>
+      <g id="icon-close"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></g>
+    </defs>
+  </svg>
+  
+  <div id="app"></div>
+
+  <!-- Shown by src/core/LoadingIndicator.js while a new slide/lesson/test's
+       content is being fetched (see the 'content:loading' EventBus event
+       LessonEngine/TestEngine emit around their async loadJSON calls).
+       Lives here as static markup — not injected via innerHTML — so its
+       inline <style> block needs no CSP script-src hash (style-src already
+       allows 'unsafe-inline'), and so it's available the instant the page
+       parses, before any JS module has run. -->
+  <div id="content-loader" class="content-loader" aria-hidden="true">
+    <style>
+      .content-loader {
+        position: fixed; inset: 0; z-index: 9999;
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 14px;
+        background: color-mix(in srgb, var(--shell-bg, #090d16) 85%, transparent);
+        backdrop-filter: blur(2px);
+        opacity: 0; pointer-events: none;
+        transition: opacity 200ms ease;
+      }
+      .content-loader.is-visible { opacity: 1; pointer-events: auto; }
+      /* .content-loader is hidden via opacity, not display:none (so it can fade),
+         and an opacity-hidden element keeps ticking its animations every frame.
+         So the loader itself (<app-loader>, the look's loader, defined via
+         src/ui/AppShell.js; content:loading never fires before that) is
+         display:none until the overlay is actually visible. Quill is the
+         built-in look, so the first loader is never another look's. */
+      .content-loader:not(.is-visible) app-loader { display: none; }
+      .content-loader app-loader > * { color: var(--text-main); font-family: var(--font-family, sans-serif); font-size: 0.9rem; }
+    </style>
+    <app-loader size="96" label="Loading…"></app-loader>
+  </div>
+
+  <script type="module" src="./src/app.js"></script>
+</body>
+</html>

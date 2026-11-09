@@ -1,0 +1,924 @@
+/* ── Theme Tokens ───────────────────────────────────────────────────── */
+:root {
+  /* Fredoka (display) over Nunito (body) — the pairing from the reference
+     designs. Both are vendored under /vendor/fonts and loaded by
+     index.html's <link> to app-fonts.css BEFORE this file; nothing here may
+     @import them from a CDN (invariant 2, and a CDN import silently degrades
+     to system-ui offline, which defeats the PWA).
+
+     The authoring app is the one exception — it pins back to Nunito for
+     headings too, via the `body:has(#aa-shell)` block near the bottom of this
+     file, since a playful display face reads wrong on a professional tool. */
+  --font-family: 'Nunito', system-ui, sans-serif;
+  --font-heading: 'Fredoka', 'Nunito', system-ui, sans-serif;
+  /* Interface type: buttons, chips, kickers. The same face as headings here;
+     a look that sets serif headings points this at its sans. Pinned again in
+     the authoring block below: a var() here resolves on <html>, before that
+     block's --font-heading on <body> could reach it. */
+  --font-ui: var(--font-heading);
+
+  /* Classic lesson mode, light (docs/sprints/wip/lesson-modes-plan.md;
+     prototype v2 a/): warm paper, periwinkle primary, riso accents, matte
+     surfaces. The prototype's literal values were corrected where they
+     missed WCAG AA (white on its #5E7EDF button was 3.8:1): every pair
+     below that carries text is >=4.5:1, measured. Story mode re-values
+     these same names under html[data-lesson-mode="story"] further down. */
+  --bg-base: #faf9f5;
+  --bg-surface: #ffffff;
+  --bg-panel: #f0eee6;
+  /* A second, deeper panel step: progress tracks, readout wells, badges. */
+  --bg-panel-2: #eae7db;
+  --text-main: #26241d;
+  /* Body prose: one step softer than headings, 8:1 on --bg-base. */
+  --text-soft: #4f4d46;
+  /* 5.1:1 on --bg-panel, 4.8:1 on --bg-panel-2 (the prototype's #87867f was 3.5:1). */
+  --text-muted: #66645c;
+  --border-color: #e4e1d4;
+  /* Also the 3D "lip" colour under ghost buttons, chips and rows. */
+  --border-hover: #cfcabb;
+
+  /* 4.9:1 under white text; 4.6:1 as link text on --bg-base. */
+  --primary-color: #4b6ad3;
+  --primary-hover: #3a55b0;
+  --primary-light: #e6ebfa;
+  --on-primary: #ffffff;
+
+  /* Accents. Text-safe (>=4.5:1 on white) except --accent-gold, which is a
+     FILL-ONLY tone (progress fill, stars, streak flame) — never text. */
+  --accent-teal: #37804f;
+  --accent-coral: #b5573a;
+  --accent-amber: #9a6b12;
+  --accent-gold: #e9b44c;
+  --accent-violet: #b04a86;
+  --accent-blue: #2774ac;
+
+  /* Gradients. White text sits on --gradient-hero/--gradient-banner (home and
+     module banners, --reveal-on-scrim); every stop keeps >=4.5:1 under it. */
+  --gradient-hero: linear-gradient(140deg, #4b6ad3 0%, #2774ac 60%, #b5573a 130%);
+  --gradient-card: linear-gradient(160deg, #ffffff 0%, #fcfbf8 100%);
+  --gradient-banner: linear-gradient(135deg, #3f62c9 0%, #2774ac 100%);
+  --gradient-gold: linear-gradient(135deg, #efc26a 0%, #9a6b12 100%);
+  --gradient-teal: linear-gradient(135deg, #7cc496 0%, #37804f 100%);
+
+  --success-bg: #e2f3e7;
+  --success-text: #2f7046;
+  --error-bg: #fbe7e4;
+  --error-text: #b23a3a;
+  --warn-bg: #fbf0d9;
+  --warn-text: #8a5a0b;
+  /* Neutral/informational — not tied to correct or incorrect (a question's
+     "Explanation" box shows for both, so it can't reuse success/error). */
+  --info-bg: #edf3fa;
+  --info-text: #1f6396;
+
+  /* Generic categorical palette — "N distinguishable colors for N items"
+     (a photo-diagram's species/node tinting, a legend, anything needing
+     several same-weight categorical colors), the student-runtime/content
+     counterpart of src/simulations/base/sim-theme.css's own closed
+     --sim-series-1..8 (that file isn't reachable outside src/simulations/).
+     Closed the same way: don't invent a one-off hardcoded color when a
+     category needs distinguishing, reach for these (or add one here with a
+     generic, cross-component justification — invariant 9). */
+  --content-series-1: #2f7edb;
+  --content-series-2: #c17a12;
+  --content-series-3: #0f9d63;
+  --content-series-4: #c94f8a;
+  --content-series-5: #7c5cd6;
+  --content-series-6: #d64545;
+  /* figure field (content-block@1 `figure`, src/core/components/FigureLayouts.js): Quill's
+     rounded, saturated figure. plain overrides these in src/looks/plain/look.css, and adds
+     --fig-case-* for the casefile setting. */
+  --fig-desk: #f3f0ff; --fig-ground: #f3f0ff; --fig-card: #ffffff; --fig-edge: #ddd5f7; --fig-rule: #ece7fb;
+  --fig-ink: #241a4d; --fig-muted: #6b6291; --fig-lead: #0b6fa8; --fig-lead-tint: #dff0fb;
+  --fig-sig: #c42a52; --fig-sig-tint: #fbe3ea; --fig-ghost: #d6cdf3;
+  --fig-s1: #0284c7; --fig-s2: #d97706; --fig-s3: #059669; --fig-s4: #db2777; --fig-s5: #7c3aed; --fig-grey: #8b84a8;
+  --fig-shadow: #241a4d1f; --fig-tab: #f3f0ff; --fig-ring: #ece7fb; --fig-arrow: #0b6fa8; --fig-tab-ink: #241a4d;
+  --fig-r: 14px;
+  --fig-font-mono: 'Nunito Rupee', 'Courier Prime', 'Courier New', ui-monospace, monospace;
+
+  /* The hint button and revealed hint in QuestionBase's numeric-style
+     questions. The same amber in both themes, as these always were. */
+  --hint-ink: #b45309;
+  --hint-accent: #d97706;
+  --hint-rule: #f59e0b;
+  --hint-shadow: rgb(0 0 0 / 0.05);
+
+  /* Math-workspace topic visuals (src/plugins/questions/math-workspace/v1/visuals/):
+     the look's "object" trick on bars, tiles and pins - a flat shine strip
+     and a flat shaded side - must darken/lighten a series fill the same way in
+     both themes, which color-mix with --text-main cannot (it flips). --mw-deep
+     is the mixing ink for lips and shaded sides; --mw-shine the highlight. */
+  --mw-deep: #1d1b16;
+  --mw-shine: rgb(255 255 255 / 0.4);
+
+  /* math-workspace@1 (src/plugins/questions/math-workspace/v1): the step
+     trail's game-board palette. Saturated flat fills with a darker
+     lip for valid/broken links, the gold of XP and stars, the graph-paper
+     board, and the "what moved" highlight behind a changed term. Fills carry
+     icons, not text; text on them uses --mw-on-fill. */
+  --mw-ok-fill: #58b947;
+  --mw-ok-lip: #3d8f2f;
+  --mw-bad-fill: #ec5b4f;
+  --mw-bad-lip: #b8392f;
+  --mw-gold-fill: #ffc53d;
+  --mw-gold-lip: #d99a0b;
+  --mw-on-fill: #1d1c17;
+  --mw-board-bg: #eef2fd;
+  --mw-board-dot: #d3dbf3;
+  --mw-moved-bg: #ffe9a6;
+  --mw-moved-ink: #4a3300;
+  --mw-moved-lip: #f0c04a;
+
+  /* Fixed-palette terminal/console UI (importer log, etc.) — intentionally
+     doesn't follow light/dark theme, but tokenized to avoid raw hex in JS/CSS. */
+  --terminal-bg: #1e1e1e;
+  --terminal-text: #00ff00;
+
+  /* Quill the penguin — the student runtime's mascot (src/core/quill/QuillRig.js).
+     These are BRAND colors, not theme colors: Quill is the same bird in light
+     and dark, exactly like --terminal-* above, so they are declared once here
+     and never overridden in the dark block. Only the surfaces *around* him
+     (speech bubble, drop shadow) follow the theme.
+     Defined on :root so they inherit through every Shadow DOM boundary —
+     which is what lets a DomSimulation scene reuse the same rig (custom
+     properties cross shadow boundaries; stylesheets do not). */
+  --quill-body-hi: #6a6ee5;
+  --quill-body-mid: #4348bd;
+  --quill-body-lo: #1f2160;
+  --quill-limb: #1d2058;
+  --quill-belly: #ffffff;
+  --quill-belly-lo: #e8eeff;
+  --quill-foot: #ff9e45;
+  --quill-foot-lo: #c45f12;
+  --quill-beak: #ff8f3f;
+  --quill-beak-lo: #c8631a;
+  --quill-beak-mouth: #5a1d12;
+  --quill-tongue: #ff7b93;
+  --quill-scarf: #ff6b8a;
+  --quill-scarf-lo: #c43d5e;
+  --quill-scarf-stripe: #ffc9d8;
+  --quill-scarf-tail: #e8506f;
+  --quill-cheek: rgb(255 158 192 / 0.45);
+  --quill-iris: #181240;
+  --quill-heart: #ff5ca8;
+  --quill-feather: #ffd25e;
+  --quill-feather-lo: #c8631a;
+
+  /* The brand lockup (src/ui/components/CoAuthorLogo.js): Quill on a sunny
+     tile plus the "coauthor" wordmark. The tile is brand (same in both
+     themes). The wordmark's "author" has no token: it mixes the header's own
+     text colour with Quill's indigo, so it reads on a night bar and a paper
+     bar alike. Its lip and the tile's lip follow the theme. */
+  --logo-tile: #ffd25e;
+  --logo-tile-ring: #ffe39a;
+  --logo-tile-shade: rgb(200 99 26 / 0.35);
+  --logo-word-lip: rgb(31 33 96 / 0.22);
+
+  /* Quill's page turn (src/ui/pageTurn.js): the back of the turning page is
+     ruled notebook paper; the shadow falls on the page underneath. */
+  --page-turn-paper: #fffaf0;
+  --page-turn-paper-lo: #e9dfc8;
+  --page-turn-rule: rgb(39 116 172 / 0.22);
+  --page-turn-margin: rgb(229 80 111 / 0.45);
+  --page-turn-shadow: rgb(38 36 29 / 0.32);
+  --page-turn-gleam: rgb(255 255 255 / 0.85);
+  
+  /* Shell / App specific */
+  --shell-bg: var(--bg-base);
+  --shell-panel: var(--bg-surface);
+  --shell-text: var(--text-main);
+  --shell-border: var(--border-color);
+  --shell-btn-bg: #f1f5f9;
+  --shell-btn-hover: #e2e8f0;
+  
+  --shell-header-bg: #0f172a;
+  --shell-header-text: #ffffff;
+  --sidebar-bg: #ffffff;
+  --sidebar-hover: #f1f5f9;
+  --sidebar-active: #eef2ff;
+  --sidebar-active-text: #4f46e5;
+
+  /* Warm-tinted, matte (Classic has no glass). */
+  --shadow-sm: 0 1px 2px rgb(38 36 29 / 0.06);
+  --shadow-md: 0 6px 18px -6px rgb(38 36 29 / 0.14);
+  --shadow-lg: 0 12px 28px -8px rgb(38 36 29 / 0.2);
+  --shadow-primary: 0 4px 8px rgb(75 106 211 / 0.2);
+
+  /* Progressive disclosure (docs/sprints/wip/progressive-disclosure-lesson-slides.md).
+     One knob for how a newly-revealed lesson beat arrives, and how far a prior
+     one recedes. Custom properties inherit *into* Shadow DOM, which the
+     `prefers-reduced-motion` block at the bottom of this file does not — it
+     selects `*` and stops at every shadow boundary — so a plugin that animates
+     reads these but must still repeat the media query locally. `content-block.js`
+     and `semantic-descriptive/v1/styles.js` both do. */
+  --motion-reveal: 380ms;
+  --motion-reveal-rise: 8px;
+  --motion-reveal-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --reveal-dim: 0.7;
+  /* The spotlight wash, and the scrim behind text overlaid on a full-bleed
+     image. Both are deliberately the same in light and dark: they darken a
+     *photograph*, not the page, and an image's own brightness has nothing to
+     do with the UI theme. --reveal-on-scrim follows for the same reason. */
+  --reveal-scrim: rgb(0 0 0 / 0.55);
+  --reveal-scrim-strong: rgb(0 0 0 / 0.9);
+  --reveal-on-scrim: #ffffff;
+  /* Dim layer behind a modal dialog or bottom sheet (parent area dialogs,
+     the student menu's phone sheet). Darkens the page in every mode. */
+  --scrim: rgb(38 36 29 / 0.45);
+  /* Narrated lessons (src/ui/components/NarrationUi.js): the caption card,
+     its word highlight (a brass sweep under dark ink), and the strip's
+     beat scrubber. Built from the base tokens, so a look re-values them. */
+  --narr-cap-bg: color-mix(in srgb, var(--bg-surface) 94%, transparent);
+  --narr-cap-bg-over: color-mix(in srgb, var(--bg-surface) 97%, transparent);
+  --narr-cap-ink: var(--text-main);
+  --narr-cap-rim: var(--border-color);
+  --narr-word-next: color-mix(in srgb, var(--text-main) 50%, var(--bg-surface));
+  --narr-word-now-ink: var(--text-main);
+  --narr-word-sweep: color-mix(in srgb, var(--accent-gold) 48%, transparent);
+  --narr-track: color-mix(in srgb, var(--text-main) 14%, transparent);
+  --narr-fill: var(--primary-color);
+  --narr-play-lip: var(--primary-hover);
+
+  /* Light/dark diagram-pair switch for renderBlockImage()'s optional
+     `image.srcDark` (blockImageLayout.js) — a hand-authored image can't
+     resolve CSS variables itself, so a matched light/dark pair is toggled by
+     flipping which of the two <img> elements is visible, driven by these
+     tokens the same way every other themed value in this file works. */
+  --cb-image-light-display: block;
+  --cb-image-dark-display: none;
+
+  /* ── Scales (added by the runtime redesign sprint) ───────────────────
+     These are theme-invariant, so they live only here: `:root` IS <html>, and
+     the dark block below overrides colors only. Before these existed every
+     component inlined its own values, which is why radii ranged 4px-20px. */
+  --radius-xs: 8px;
+  --radius-sm: 12px;
+  --radius-md: 16px;
+  --radius-lg: 22px;
+  --radius-xl: 28px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 24px; --space-6: 32px; --space-7: 48px; --space-8: 64px;
+
+  --fs-display: clamp(2.5rem, 5.6vw, 4.3rem);
+  --fs-h1: clamp(1.75rem, 3.8vw, 2.85rem);
+  --fs-h2: 1.5rem;
+  --fs-h3: 1.15rem;
+  --fs-body: 1rem;
+  --fs-small: 0.87rem;
+  --fs-kicker: 0.71rem;
+  /* Home greeting and the hero card's heading: their own steps, not --fs-h1. */
+  --fs-greeting: clamp(1.8rem, 3.5vw, 2.6rem);
+  --fs-hero: clamp(1.6rem, 3vw, 2.3rem);
+  /* A question's stem: a sentence to read, loud in Quill. */
+  --fs-stem: 1.15rem;
+  --lh-stem: 1.35;
+  --fw-stem: 600;
+  /* Weights. --fw-medium and --fw-strong for emphasised running text and
+     labels, --fw-heavy for buttons, chips and kickers, --fw-black for the
+     loudest headers, and --fw-feedback for the sentence in a verdict banner. */
+  --fw-medium: 600;
+  --fw-strong: 700;
+  --fw-heavy: 800;
+  --fw-black: 900;
+  --fw-feedback: 800;
+  --lh-tight: 1.14;
+  --lh-body: 1.65;
+
+  /* The 3D press: `0 Npx 0 <darker>` offset with no blur, plus how far the
+     button travels on :active. sharedStyles.js hardcoded `0 5px 0` and each
+     plugin re-hardcoded its own. */
+  --press-1: 0 4px 0;
+  --press-2: 0 6px 0;
+  --press-travel: 4px;
+  /* Smaller controls (rows, choices, icon buttons) travel less. */
+  --press-travel-sm: 3px;
+  --hover-lift: -2px;
+
+  /* Shapes with a fixed size of their own: these do not follow Story's
+     --radius-md, --rule-w or slanted --lip, so they are separate names, and a
+     look flattens each one here. */
+  --radius-tile: 16px;                 /* verdict banner, lesson number */
+  --radius-tile-sm: 13px;              /* lesson number on a phone */
+  --radius-callout: 20px;              /* explanation box */
+  --radius-btn-lg: 18px;
+  --radius-icon-btn: 14px;
+  --radius-kbd: 7px;
+  --rule-w-fixed: 2px;
+  --rule-w-bold: 3px;
+  --lip-fixed: 0 4px 0;                /* verdict banner, explanation box */
+  --lip-tile: 0 3px 0;                 /* current lesson number */
+  --kbd-lip-w: 3px;
+  --lesson-num-size: 54px;
+  --lesson-num-size-sm: 44px;
+  --reveal-bar-w: 5px;
+  /* A course card's top band on Home. --card-banner-bg is left unset: unset,
+     each subject keeps its own gradient; set, a look gives all of them one
+     surface. */
+  --card-banner-h: 100px;
+  --card-banner-ink: var(--reveal-on-scrim);
+  --card-banner-track: rgb(255 255 255 / 0.28);
+  /* How solid the lesson's bottom bar is over the page scrolling under it.
+     Solid: at 92% the slide's text showed through the bar, and more through
+     the disabled (opacity 0.45) Previous button (Q-07, 2026-11-09). */
+  --action-bar-opacity: 100%;
+  /* The art tile on the hero card. It collapses by itself when the look has
+     no companion to stand on it (ModuleHeroCard.js). */
+  --hero-art-bg:
+    radial-gradient(circle at 30% 25%, color-mix(in srgb, var(--reveal-on-scrim) 35%, transparent) 0 8%, transparent 30%),
+    linear-gradient(140deg, var(--primary-color) 0%, var(--accent-blue) 55%, var(--accent-coral) 130%);
+
+  /* Structural tokens: Classic values here, Story re-values them below.
+     Components draw rules, lips and cards through these instead of literal
+     widths/offsets, so one token block restyles them per lesson mode. */
+  --rule-w: 2px;                       /* outline width of cards, chips, rows */
+  --lip: 0 3px 0;                      /* 3D lip offset under chips/buttons */
+  --lip-color: var(--border-hover);
+  --card-shadow: var(--shadow-md);
+  --primary-text: var(--primary-color); /* primary used AS TEXT (links, labels) */
+  --on-accent: var(--on-primary);      /* text on teal/success/error fills */
+  --bg-sunken: var(--bg-panel-2);      /* recessed wells ("story so far") */
+  --bubble-fill: var(--bg-surface);
+  --bubble-ink: var(--border-color);
+  --stage-head-bg: var(--bg-panel);
+  --stage-head-ink: var(--text-main);
+  --heading-weight: 700;
+  /* Option key chip (A/B/C) and option-row hover tilt. */
+  --opt-key-radius: 9px;
+  --opt-key-bg: var(--bg-panel);
+  --opt-key-ink: var(--text-main);
+  --opt-hover-tilt: 0deg;
+
+  /* Keyboard focus: a solid primary ring (--primary-light was ~1.1:1 on
+     white, effectively invisible). Use: outline: var(--focus-ring); */
+  --focus-ring: 3px solid var(--primary-color);
+  --focus-ring-offset: 2px;
+
+  --ease-spring: cubic-bezier(0.3, 1.5, 0.5, 1);
+  --ease-settle: cubic-bezier(0.2, 0.8, 0.3, 1);
+  --motion-fast: 120ms;
+  --motion-base: 240ms;
+  --motion-slow: 420ms;
+  /* The bounce of a graded answer: 1 is the full thud and spring, 0 leaves
+     only the fade. Multiplies every offset in those keyframes, lip included. */
+  --bounce: 1;
+  --ease-pop: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --ease-overshoot: cubic-bezier(0.2, 1.3, 0.4, 1);
+  /* How far a page section rises as it arrives. */
+  --rise-distance: 14px;
+  /* Where the theme/mode glyph spins in from. */
+  --spin-from: rotate(-100deg) scale(0.6);
+
+  /* World surfaces (theme-varying; dark overrides below). */
+  --glass-bg: rgb(250 249 245 / 0.92);
+  --cosmos-star: rgb(38 36 29 / 0.22);
+  /* How far down the page a session's own sticky bar must start so it clears
+     AppShell's floating pill instead of sticking underneath it. One token, so
+     the two cannot drift apart. */
+  --appbar-offset: 74px;
+  --glass-blur: 12px;
+  --surface-card: var(--gradient-card);
+
+  /* Landing page (docs/sprints/completed/landing-page-and-guides.md, "Visual
+     direction"). The explorers' half is an illustration of Quill's polar
+     night, like a poster, so it stays a night scene in BOTH themes: light
+     only softens it (a twilight sky, dimmer stars). The grown-ups' half is
+     daylight paper here and lamplit paper in dark. Text on the night sky
+     always sits on --landing-night-panel or directly on the sky's darkest
+     stops; every pair carrying text is >=4.5:1, measured. */
+  --landing-sky-top: #1c2560;
+  --landing-sky-mid: #343c8a;
+  --landing-sky-low: #5b4f9e;
+  --landing-star: rgb(255 252 236 / 0.75);
+  --landing-aurora-1: #43e5b5;
+  --landing-aurora-2: #4cc3ff;
+  --landing-aurora-3: #b48cff;
+  --landing-planet-a: #ff8a5c;
+  --landing-planet-b: #59a7f2;
+  --landing-planet-rim: #ffe0a3;
+  --landing-sea: #26357a;
+  --landing-sea-deep: #161f52;
+  --landing-floe: #f1f7ff;
+  --landing-floe-shade: #a9c3ea;
+  --landing-berg: #8ea6dc;
+  --landing-dawn-1: #ff8f6b;
+  --landing-dawn-2: #ffc27d;
+  --landing-dawn-3: #ffe9c4;
+  --landing-glow: rgb(150 165 255 / 0.32);
+  --landing-display-grad-1: #ffd166;
+  --landing-display-grad-2: #ff8a5c;
+  --landing-display-grad-3: #ff6fae;
+  --landing-explorer: #46dcb8;
+  --landing-night-panel: rgb(31 34 92 / 0.82);
+  --landing-night-edge: rgb(180 190 255 / 0.28);
+  --landing-on-night: #f7f5ff;
+  --landing-on-night-soft: #d3d1f2;
+  --landing-cta: #ff7d5c;
+  --landing-cta-lip: #b9442b;
+  --landing-on-cta: #2b1020;
+  --landing-paper: #f4ecd8;
+  --landing-paper-2: #fbf6e7;
+  --landing-ink: #2a2520;
+  --landing-ink-soft: #4a433d;
+  --landing-paper-shadow: rgb(42 37 32 / 0.16);
+  --landing-grownup: #a33f52;
+  /* Third audience (authors) for guide tabs and chips, beside explorer and grownup. */
+  --landing-author: #2d5f9a;
+  --landing-moss: #3f6b35;
+  --landing-lamp: rgb(255 214 120 / 0);
+}
+
+html[data-theme="dark"] {
+  /* Classic, dark: warm charcoal (prototype v2 a/). */
+  --hint-ink: #b45309;
+  --hint-accent: #d97706;
+  --hint-rule: #f59e0b;
+  --hint-shadow: rgb(0 0 0 / 0.05);
+  --logo-word-lip: rgb(0 0 0 / 0.45);
+  --logo-tile-shade: rgb(0 0 0 / 0.45);
+  --page-turn-paper: #57534a;
+  --page-turn-paper-lo: #34312b;
+  --page-turn-rule: rgb(109 190 239 / 0.22);
+  --page-turn-margin: rgb(255 107 138 / 0.35);
+  --page-turn-shadow: rgb(0 0 0 / 0.6);
+  --page-turn-gleam: rgb(255 255 255 / 0.14);
+  --bg-base: #1c1b17;
+  --bg-surface: #26251f;
+  --bg-panel: #2e2c25;
+  --bg-panel-2: #38352c;
+  --text-main: #f0eee6;
+  --text-soft: #d6d3c8;
+  --text-muted: #a9a598;
+  --border-color: #3b382e;
+  --border-hover: #4c483b;
+
+  --primary-color: #8ca5f2;
+  --primary-hover: #6c86d8;
+  --primary-light: rgb(140 165 242 / 0.16);
+  --on-primary: #17161a;
+
+  --accent-teal: #7cc496;
+  --accent-coral: #e58e6d;
+  --accent-amber: #efc26a;
+  --accent-gold: #efc26a;
+  --accent-violet: #e58fb8;
+  --accent-blue: #6dbeef;
+
+  /* White text on these banners: every stop >=5.5:1. */
+  --gradient-hero: linear-gradient(140deg, #3f5cb8 0%, #2a6a99 60%, #8f4a33 130%);
+  --gradient-card: linear-gradient(160deg, #26251f 0%, #2e2c25 100%);
+  --gradient-banner: linear-gradient(135deg, #3f5cb8 0%, #2a6a99 100%);
+  --gradient-gold: linear-gradient(135deg, #efc26a 0%, #b5862a 100%);
+  --gradient-teal: linear-gradient(135deg, #7cc496 0%, #37804f 100%);
+
+  --success-bg: #24382b;
+  --success-text: #7cc496;
+  --error-bg: #402726;
+  --error-text: #e58080;
+  --warn-bg: #3d3220;
+  --warn-text: #efc26a;
+  --info-bg: #1f3340;
+  --info-text: #6dbeef;
+
+  /* See :root's own comment — same 6 categories, brightened for a dark surface. */
+  --content-series-1: #5aa8f5;
+  --content-series-2: #f0b429;
+  --content-series-3: #34d399;
+  --content-series-4: #f472b6;
+  --content-series-5: #a78bfa;
+  --content-series-6: #f87171;
+  --fig-desk: #0d0a22; --fig-ground: #0d0a22; --fig-card: #181134; --fig-edge: #2f2560; --fig-rule: #231a49;
+  --fig-ink: #fdfaff; --fig-muted: #b6abd8; --fig-lead: #57ccff; --fig-lead-tint: #143049;
+  --fig-sig: #ff7d93; --fig-sig-tint: #4a1a33; --fig-ghost: #2f2560;
+  --fig-s1: #38bdf8; --fig-s2: #fbbf24; --fig-s3: #34d399; --fig-s4: #f472b6; --fig-s5: #a78bfa; --fig-grey: #8f86b3;
+  --fig-shadow: #00000066; --fig-tab: #0d0a22; --fig-ring: #231a49; --fig-arrow: #57ccff; --fig-tab-ink: #fdfaff;
+
+  /* Math-workspace visuals: see :root. */
+  --mw-deep: #0a0907;
+  --mw-shine: rgb(255 255 255 / 0.32);
+
+  /* math-workspace@1 - see :root. */
+  --mw-ok-fill: #6fcf5c;
+  --mw-ok-lip: #3f8f33;
+  --mw-bad-fill: #f07468;
+  --mw-bad-lip: #a83a31;
+  --mw-gold-fill: #ffcf5a;
+  --mw-gold-lip: #b9850f;
+  --mw-on-fill: #17161a;
+  --mw-board-bg: #2b2923;
+  --mw-board-dot: #3d3a30;
+  --mw-moved-bg: #5a4615;
+  --mw-moved-ink: #ffe9a6;
+  --mw-moved-lip: #b9850f;
+
+  /* Shell / App specific */
+  --shell-bg: var(--bg-base);
+  --shell-panel: var(--bg-surface);
+  --shell-text: var(--text-main);
+  --shell-border: var(--border-color);
+  --shell-btn-bg: #1e293b;
+  --shell-btn-hover: #334155;
+  
+  --shell-header-bg: #0d0a22;
+  --sidebar-bg: #22184a;
+  --sidebar-hover: #2a1f5e;
+  --sidebar-active: #2e1065;
+  --sidebar-active-text: #c084fc;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.3);
+  --shadow-md: 0 8px 22px -6px rgb(0 0 0 / 0.45);
+  --shadow-lg: 0 14px 30px -8px rgb(0 0 0 / 0.55);
+  --shadow-primary: 0 4px 8px rgb(140 165 242 / 0.25);
+
+  --cb-image-light-display: none;
+  --cb-image-dark-display: block;
+
+  --glass-bg: rgb(28 27 23 / 0.92);
+  --scrim: rgb(0 0 0 / 0.6);
+  /* Narrated lessons (src/ui/components/NarrationUi.js): the caption card,
+     its word highlight (a brass sweep under dark ink), and the strip's
+     beat scrubber. Built from the base tokens, so a look re-values them. */
+  --narr-cap-bg: color-mix(in srgb, var(--bg-surface) 94%, transparent);
+  --narr-cap-bg-over: color-mix(in srgb, var(--bg-surface) 97%, transparent);
+  --narr-cap-ink: var(--text-main);
+  --narr-cap-rim: var(--border-color);
+  --narr-word-next: color-mix(in srgb, var(--text-main) 56%, var(--bg-surface));
+  --narr-word-now-ink: var(--text-main);
+  --narr-word-sweep: color-mix(in srgb, var(--accent-gold) 36%, transparent);
+  --narr-track: color-mix(in srgb, var(--text-main) 18%, transparent);
+  --narr-fill: var(--primary-color);
+  --narr-play-lip: var(--primary-hover);
+  --cosmos-star: rgb(255 255 255 / 0.4);
+
+  /* Landing page, dark: a deeper polar night; the grown-ups' half becomes
+     lamplit paper (story-dark parchment, with a warm pool of light). */
+  --landing-sky-top: #070920;
+  --landing-sky-mid: #141441;
+  --landing-sky-low: #2c2468;
+  --landing-star: #fffbe8;
+  --landing-sea: #121a46;
+  --landing-sea-deep: #090e2c;
+  --landing-floe: #e3eeff;
+  --landing-floe-shade: #8fa9d6;
+  --landing-berg: #5d74b3;
+  --landing-glow: rgb(120 130 255 / 0.3);
+  --landing-night-panel: rgb(24 22 66 / 0.8);
+  --landing-paper: #161925;
+  --landing-paper-2: #212638;
+  --landing-ink: #f3ead6;
+  --landing-ink-soft: #d8d0bd;
+  --landing-paper-shadow: rgb(0 0 0 / 0.45);
+  --landing-grownup: #f0b93c;
+  --landing-author: #8fb8f0;
+  --landing-moss: #82c07a;
+  --landing-lamp: rgb(255 200 110 / 0.09);
+}
+
+
+/* ── Story lesson mode (docs/sprints/wip/lesson-modes-plan.md; prototype v2
+   b/ "Storybook World"): parchment by day, "midnight storybook" by night.
+   Cut-paper ink outlines (--border-color IS the ink line), offset paper
+   shadows, Dela Gothic One over Manrope (lazy-loaded by LessonModeManager).
+   Gold is a FILL here (2.2:1 as text on paper), so text that wants the
+   accent reads --primary-text (berry by day). Pairs carrying text are >=4.5:1.
+   Selectors are (0,2,1) so they beat html[data-theme="dark"] in both orders,
+   and still lose to body:has(#aa-shell) (1,0,1): the authoring app never
+   follows a lesson mode. */
+html[data-lesson-mode="story"] {
+  --font-family: 'Manrope', 'Nunito', system-ui, sans-serif;
+  --font-heading: 'Dela Gothic One', 'Fredoka', system-ui, sans-serif;
+  /* Dela Gothic One ships one weight; never let the browser fake a bold. */
+  --heading-weight: 400;
+  font-synthesis-weight: none;
+
+  --rule-w: 2.5px;
+  --lip: 3px 4px 0;
+  --opt-key-radius: 50%;
+  --opt-key-bg: var(--accent-gold);
+  --opt-key-ink: #2a2520;
+  --opt-hover-tilt: -0.4deg;
+  --radius-md: 14px;
+  --press-1: 3px 4px 0;
+  --press-2: 4px 5px 0;
+}
+html[data-lesson-mode="story"]:not([data-theme="dark"]) {
+  --bg-base: #f4ecd8;
+  --bg-surface: #fbf6e7;
+  --bg-panel: #efe3c8;
+  --bg-panel-2: #ebdfc3;
+  --bg-sunken: #ebdfc3;
+  --text-main: #2a2520;
+  --text-soft: #4a433d;
+  --text-muted: #6e6556;
+  --border-color: #2a2520;
+  --border-hover: rgb(42 37 32 / 0.3);
+  --lip-color: rgb(42 37 32 / 0.25);
+
+  --primary-color: #c9a227;
+  --primary-hover: #2a2520;
+  --primary-light: rgb(201 162 39 / 0.22);
+  --on-primary: #2a2520;
+  --primary-text: #a33f52;
+  /* Ink reads on gold but not on the green/berry fills (2.4:1): paper does. */
+  --on-accent: #fbf6e7;
+
+  --accent-teal: #3f6b35;
+  --accent-coral: #a33f52;
+  --accent-amber: #8a6a0e;
+  --accent-gold: #c9a227;
+  --accent-violet: #a33f52;
+  --accent-blue: #2e6e63;
+
+  --gradient-hero: linear-gradient(140deg, #384732 0%, #2f3d29 100%);
+  --gradient-card: linear-gradient(160deg, #fbf6e7 0%, #f4ecd8 100%);
+  --gradient-banner: linear-gradient(135deg, #384732 0%, #2e6e63 100%);
+  --gradient-gold: linear-gradient(135deg, #e3b93e 0%, #c9a227 100%);
+  --gradient-teal: linear-gradient(135deg, #4e7b43 0%, #3f6b35 100%);
+
+  --success-bg: #dce8c8;
+  --success-text: #3f6b35;
+  --error-bg: #f0d9ce;
+  --error-text: #a33f52;
+  --warn-bg: #f3e3b8;
+  --warn-text: #7a5a08;
+  --info-bg: #dde8e4;
+  --info-text: #2e6e63;
+
+  --shadow-sm: 3px 4px 0 rgb(42 37 32 / 0.18);
+  --shadow-md: 4px 5px 0 rgb(42 37 32 / 0.2);
+  --shadow-lg: 8px 10px 0 rgb(42 37 32 / 0.14);
+  --card-shadow: 8px 10px 0 rgb(42 37 32 / 0.14);
+  --shadow-primary: 3px 4px 0 rgb(42 37 32 / 0.3);
+
+  --bubble-fill: #fffdf4;
+  --bubble-ink: #2a2520;
+  --stage-head-bg: #384732;
+  --stage-head-ink: #f4ecd8;
+  --glass-bg: rgb(244 236 216 / 0.92);
+  --scrim: rgb(42 37 32 / 0.45);
+}
+html[data-lesson-mode="story"][data-theme="dark"] {
+  --bg-base: #12141d;
+  --bg-surface: #1e2230;
+  --bg-panel: #262b3d;
+  --bg-panel-2: #2c3247;
+  --bg-sunken: #0c0e16;
+  --text-main: #f3ead6;
+  --text-soft: #d8d0bd;
+  --text-muted: #a79d88;
+  --border-color: #f3ead6;
+  --border-hover: rgb(243 234 214 / 0.3);
+  --lip-color: rgb(0 0 0 / 0.6);
+
+  --primary-color: #f0b93c;
+  --primary-hover: #0c0e16;
+  --primary-light: rgb(240 185 60 / 0.18);
+  --on-primary: #12141d;
+  --primary-text: #f0b93c;
+
+  --accent-teal: #82c07a;
+  --accent-coral: #e5708a;
+  --accent-amber: #f0b93c;
+  --accent-gold: #f0b93c;
+  --accent-violet: #e5708a;
+  --accent-blue: #5e8fc0;
+
+  --gradient-hero: linear-gradient(140deg, #1f3a33 0%, #2a4a40 100%);
+  --gradient-card: linear-gradient(160deg, #1e2230 0%, #262b3d 100%);
+  --gradient-banner: linear-gradient(135deg, #1f3a33 0%, #2a4a40 100%);
+  --gradient-gold: linear-gradient(135deg, #ffd35e 0%, #f0b93c 100%);
+  --gradient-teal: linear-gradient(135deg, #82c07a 0%, #4fb8a6 100%);
+
+  --success-bg: #213521;
+  --success-text: #82c07a;
+  --error-bg: #3a222b;
+  --error-text: #e5708a;
+  --warn-bg: #3a3220;
+  --warn-text: #f0b93c;
+  --info-bg: #1f2d3a;
+  --info-text: #5e8fc0;
+
+  --shadow-sm: 3px 4px 0 rgb(0 0 0 / 0.5);
+  --shadow-md: 4px 5px 0 rgb(0 0 0 / 0.6);
+  --shadow-lg: 8px 10px 0 rgb(0 0 0 / 0.4);
+  --card-shadow: 8px 10px 0 rgb(0 0 0 / 0.4);
+  --shadow-primary: 3px 4px 0 rgb(0 0 0 / 0.6);
+
+  --bubble-fill: #252a3c;
+  --bubble-ink: #f3ead6;
+  --stage-head-bg: #1f3a33;
+  --stage-head-ink: #f3ead6;
+  --glass-bg: rgb(18 20 29 / 0.92);
+  --scrim: rgb(0 0 0 / 0.62);
+}
+
+/* The authoring app's shell root always has id="aa-shell" (set in
+   authoring-app/app.js) — the same structural-detection mechanism
+   src/ui/components/dialogs.js already uses to swap its own button styling
+   between the two visual languages.
+
+   Since the student runtime moved to the cosmic/coral palette, this block has
+   to pin the *whole* professional palette, not just the font: every token
+   above is shared, so re-valuing them would otherwise repaint the adult
+   authoring tool in a child-facing scheme — exactly the leak invariant 10 and
+   docs/ui-ux-design-system.md §1.3 exist to prevent.
+
+   Two blocks, not one, because `:has()` takes the specificity of its most
+   specific argument: `body:has(#aa-shell)` scores (1,0,1) and therefore
+   outranks `html[data-theme="dark"]` at (0,1,1). A single light-valued block
+   would win in dark mode too and silently strip the authoring app of dark
+   theme altogether. The second selector restores it at (1,1,2). */
+body:has(#aa-shell) {
+  --font-family: 'Nunito', system-ui, sans-serif;
+  --font-heading: 'Nunito', system-ui, sans-serif;
+  --font-ui: 'Nunito', system-ui, sans-serif;
+
+  --bg-base: #f8fafc;
+  --bg-surface: #ffffff;
+  --bg-panel: #f1f5f9;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --border-color: #e2e8f0;
+  --border-hover: #cbd5e1;
+
+  --primary-color: #6366f1;
+  --primary-hover: #4f46e5;
+  --primary-light: #eef2ff;
+  --on-primary: #ffffff;
+
+  --accent-teal: #0d9488;
+  --accent-coral: #f43f5e;
+  --accent-amber: #f59e0b;
+  --accent-violet: #8b5cf6;
+  --accent-blue: #0284c7;
+
+  --gradient-hero: linear-gradient(135deg, #4f46e5 0%, #7c3aed 50%, #0284c7 100%);
+  --gradient-card: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+  --gradient-gold: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  --gradient-teal: linear-gradient(135deg, #14b8a6 0%, #0d9488 100%);
+
+  --shadow-primary: 0 4px 8px rgb(79 70 229 / 0.15);
+  --glass-bg: rgb(255 255 255 / 0.85);
+  --scrim: rgb(15 23 42 / 0.65);
+
+  /* Pinned when the student runtime moved to the Classic lesson-mode palette
+     (lesson-modes-plan.md): these were shared, unpinned tokens until then.
+     The values are the ones the authoring app had before that change. */
+  --bg-panel-2: #e2e8f0;
+  --text-soft: #334155;
+  --accent-gold: #f59e0b;
+  --gradient-banner: linear-gradient(135deg, #0284c7 0%, #7c3aed 100%);
+  --success-bg: #dcfce7;
+  --success-text: #166534;
+  --error-bg: #ffe4e6;
+  --error-text: #be123c;
+  --warn-bg: #fef3c7;
+  --warn-text: #92400e;
+  --info-bg: #eff6ff;
+  --info-text: #0b6fa8;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+html[data-theme="dark"] body:has(#aa-shell) {
+  --bg-base: #090d16;
+  --bg-surface: #131b2e;
+  --bg-panel: #1e293b;
+  --text-main: #f8fafc;
+  --text-muted: #94a3b8;
+  --border-color: #1e293b;
+  --border-hover: #334155;
+
+  --primary-color: #818cf8;
+  --primary-hover: #6366f1;
+  --primary-light: #1e1b4b;
+  --on-primary: #0f172a;
+
+  --accent-teal: #2dd4bf;
+  --accent-coral: #fb7185;
+  --accent-amber: #fbbf24;
+  --accent-violet: #a78bfa;
+  --accent-blue: #38bdf8;
+
+  --gradient-hero: linear-gradient(135deg, #312e81 0%, #4c1d95 50%, #0c4a6e 100%);
+  --gradient-card: linear-gradient(145deg, #1e293b 0%, #0f172a 100%);
+  --gradient-gold: linear-gradient(135deg, #b45309 0%, #78350f 100%);
+  --gradient-teal: linear-gradient(135deg, #0d9488 0%, #115e59 100%);
+
+  --shadow-primary: 0 4px 8px rgb(129 140 248 / 0.25);
+  --glass-bg: rgb(19 27 46 / 0.85);
+  --scrim: rgb(0 0 0 / 0.6);
+
+  --bg-panel-2: #334155;
+  --text-soft: #cbd5e1;
+  --accent-gold: #fbbf24;
+  --gradient-banner: linear-gradient(135deg, #0c4a6e 0%, #4c1d95 100%);
+  --success-bg: rgba(16, 185, 129, 0.2);
+  --success-text: #34d399;
+  --error-bg: rgba(244, 63, 94, 0.2);
+  --error-text: #fb7185;
+  --warn-bg: rgba(245, 158, 11, 0.2);
+  --warn-text: #fbbf24;
+  --info-bg: rgba(87, 204, 255, 0.2);
+  --info-text: #57ccff;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5), 0 4px 6px -4px rgb(0 0 0 / 0.5);
+}
+
+/* ── Base Styles ────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+button { color: inherit; font-family: inherit; }
+
+/* `overflow-x` lives on `html`, not `body`: the UA only propagates a
+   scrolling box's overflow up to the viewport when `body`'s own overflow is
+   `visible` on both axes (CSS Overflow §Overflow Propagation). Setting it on
+   `body` instead blocks that propagation, so `body` becomes its own scroll
+   container — one whose height always exactly equals its content (nothing
+   ever overflows it internally; `html` is what actually gains the real,
+   viewport-clipped scrollbar) — which position:sticky treats as the nearest
+   scrolling ancestor for every sticky element on the page. Since that
+   container's own scroll offset never moves, no sticky element anywhere in
+   the app (LessonSession's nav header included) actually stays put while the
+   page scrolls; it just scrolls away like a static element. Putting the
+   clip on `html` instead keeps the same horizontal-scrollbar prevention
+   without hijacking sticky's containing block. */
+html {
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-family);
+  background: var(--bg-base);
+  color: var(--text-main);
+  min-height: 100vh;
+}
+
+/* Typography */
+h1, h2, h3, h4 {
+  margin-top: 0;
+  font-family: var(--font-heading);
+  font-weight: var(--heading-weight);
+  letter-spacing: -0.02em;
+}
+a { color: var(--primary-text); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ── Animations & Micro-interactions ────────────────────────────── */
+@keyframes checkmarkPop {
+  0% { transform: scale(0.8); opacity: 0.5; }
+  50% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes shakeError {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+
+@keyframes xpFloatFade {
+  0% { transform: translateY(0) scale(0.9); opacity: 1; }
+  50% { transform: translateY(-16px) scale(1.1); opacity: 1; }
+  100% { transform: translateY(-32px) scale(1); opacity: 0; }
+}
+
+@keyframes ringProgress {
+  from { stroke-dashoffset: 283; }
+}
+
+.anim-pop {
+  animation: checkmarkPop 0.35s var(--ease-pop) forwards;
+}
+
+.anim-shake {
+  animation: shakeError 0.4s ease-in-out forwards;
+}
+
+.xp-float {
+  position: absolute;
+  pointer-events: none;
+  font-family: var(--font-heading);
+  font-weight: 800;
+  color: var(--accent-amber);
+  animation: xpFloatFade 1.2s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Short landscape: AppShell's pill goes position:static there (it would eat a
+   phone's whole usable height), so a session bar must reclaim the top edge. */
+@media (max-height: 460px) and (orientation: landscape) {
+  :root { --appbar-offset: 0px; }
+}

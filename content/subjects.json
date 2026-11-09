@@ -1,0 +1,299 @@
+[
+  {
+    "code": "accountancy",
+    "label": {
+      "en": "Accountancy"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      11,
+      12
+    ]
+  },
+  {
+    "code": "arts",
+    "label": {
+      "en": "Arts"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      6,
+      9
+    ]
+  },
+  {
+    "code": "biology",
+    "label": {
+      "en": "Biology"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      11,
+      11
+    ]
+  },
+  {
+    "code": "biotechnology",
+    "label": {
+      "en": "Biotechnology"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      11,
+      12
+    ]
+  },
+  {
+    "code": "business_studies",
+    "label": {
+      "en": "Business Studies"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      11,
+      12
+    ]
+  },
+  {
+    "code": "chemistry",
+    "label": {
+      "en": "Chemistry"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      11,
+      12
+    ]
+  },
+  {
+    "code": "civics",
+    "label": {
+      "en": "Civics"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      10,
+      10
+    ]
+  },
+  {
+    "code": "computer_science",
+    "label": {
+      "en": "Computer Science"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      11,
+      12
+    ]
+  },
+  {
+    "code": "economics",
+    "label": {
+      "en": "Economics"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      10,
+      12
+    ]
+  },
+  {
+    "code": "english",
+    "label": {
+      "en": "English"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      6,
+      12
+    ]
+  },
+  {
+    "code": "fine_art",
+    "label": {
+      "en": "Fine Art"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      11,
+      12
+    ]
+  },
+  {
+    "code": "geography",
+    "label": {
+      "en": "Geography"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      10,
+      12
+    ]
+  },
+  {
+    "code": "health_and_physical_education",
+    "label": {
+      "en": "Health And Physical Education"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      10,
+      11
+    ]
+  },
+  {
+    "code": "history",
+    "label": {
+      "en": "History"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      10,
+      12
+    ]
+  },
+  {
+    "code": "home_science",
+    "label": {
+      "en": "Home Science"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      11,
+      12
+    ]
+  },
+  {
+    "code": "informatics_practices",
+    "label": {
+      "en": "Informatics Practices"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      11,
+      12
+    ]
+  },
+  {
+    "code": "knowledge_traditions",
+    "label": {
+      "en": "Knowledge Traditions"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      11,
+      11
+    ]
+  },
+  {
+    "code": "mathematics",
+    "label": {
+      "en": "Mathematics"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      6,
+      12
+    ]
+  },
+  {
+    "code": "physical_education",
+    "label": {
+      "en": "Physical Education"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      7,
+      9
+    ]
+  },
+  {
+    "code": "physics",
+    "label": {
+      "en": "Physics"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      11,
+      12
+    ]
+  },
+  {
+    "code": "political_science",
+    "label": {
+      "en": "Political Science"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      11,
+      12
+    ]
+  },
+  {
+    "code": "psychology",
+    "label": {
+      "en": "Psychology"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      11,
+      12
+    ]
+  },
+  {
+    "code": "science",
+    "label": {
+      "en": "Science"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      6,
+      10
+    ]
+  },
+  {
+    "code": "skill_education",
+    "label": {
+      "en": "Skill Education"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      9,
+      9
+    ]
+  },
+  {
+    "code": "social_science",
+    "label": {
+      "en": "Social Science"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      6,
+      9
+    ]
+  },
+  {
+    "code": "sociology",
+    "label": {
+      "en": "Sociology"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      11,
+      12
+    ]
+  },
+  {
+    "code": "vocational",
+    "label": {
+      "en": "Vocational"
+    },
+    "board": "CBSE",
+    "gradeRange": [
+      6,
+      8
+    ]
+  }
+]

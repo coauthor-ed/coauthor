@@ -1,0 +1,32 @@
+{
+  "id": "showcase-landing-descriptive",
+  "type": "structured-descriptive@1",
+  "prompt": { "en": "On a hot day, why do you feel cool when sweat dries on your skin? Write one short line for each point." },
+  "marks": 3,
+  "presentationMode": "split-inputs",
+  "evaluationMode": "coached",
+  "rubricPoints": [
+    {
+      "id": "rp-evaporate",
+      "weight": 1,
+      "uiLabel": { "en": "What happens to the sweat?" },
+      "keywordPatterns": ["evaporat"],
+      "remedyScaffold": { "prompt": { "en": "Sweat is a liquid. When it dries, it turns into a gas. What is that change called?" } }
+    },
+    {
+      "id": "rp-heat",
+      "weight": 1,
+      "uiLabel": { "en": "Where does the energy for that change come from?" },
+      "keywordPatterns": ["heat"],
+      "remedyScaffold": { "prompt": { "en": "Changing a liquid into a gas needs energy. The sweat takes this energy from your skin. What form is that energy in?" } }
+    },
+    {
+      "id": "rp-cool",
+      "weight": 1,
+      "uiLabel": { "en": "So what happens to your skin?" },
+      "keywordPatterns": ["cool"],
+      "remedyScaffold": { "prompt": { "en": "Your skin has just lost some heat. Does it get warmer or cooler?" } }
+    }
+  ],
+  "explanation": { "en": "Sweat **evaporates**. Evaporation needs energy, so the sweat takes **heat** from your skin. Your skin loses heat, so it **cools** down." }
+}

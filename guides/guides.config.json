@@ -1,0 +1,6 @@
+{
+  "_comment": "Where tools/guides/build-guides.mjs finds guides. Each source holds students/, parents/, authors/ and media/. Only local folders today; a git source ({ \"git\": url, \"ref\": tag, \"path\": \"guides/\" }) is planned (docs/sprints/completed/landing-page-and-guides.md).",
+  "sources": [
+    { "local": "guides" }
+  ]
+}

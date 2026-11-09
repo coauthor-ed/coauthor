@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "questions": {
+    "mcq-single@2": {
+      "path": "questions/mcq-single/v2/index.js",
+      "summaryKeys": ["stem"]
+    },
+    "assertion-reason@1": {
+      "path": "questions/assertion-reason/v1/index.js",
+      "summaryKeys": ["assertion.en", "assertion"]
+    },
+    "numeric-value@1": {
+      "path": "questions/numeric-value/v1/index.js",
+      "summaryKeys": ["stem"]
+    },
+    "fuzzy-descriptive@1": {
+      "path": "questions/fuzzy-descriptive/v1/index.js",
+      "summaryKeys": ["stem"]
+    },
+    "drag-match@1": {
+      "path": "questions/drag-match/v1/index.js",
+      "summaryKeys": ["stem"]
+    },
+    "molecule-drag-match@1": {
+      "path": "questions/molecule-drag-match/v1/index.js",
+      "summaryKeys": ["stem"]
+    },
+    "equation-input@1": {
+      "path": "questions/equation-input/v1/index.js",
+      "summaryKeys": ["stem"]
+    },
+    "diagram-hotspot@1": {
+      "path": "questions/diagram-hotspot/v1/index.js",
+      "summaryKeys": ["stem"]
+    },
+    "diagram-label@1": {
+      "path": "questions/diagram-label/v1/index.js",
+      "summaryKeys": ["stem"]
+    },
+    "sequence-order@1": {
+      "path": "questions/sequence-order/v1/index.js",
+      "summaryKeys": ["stem"]
+    },
+    "match-categorize@1": {
+      "path": "questions/match-categorize/v1/index.js",
+      "summaryKeys": ["stem"]
+    },
+    "fill-blank@1": {
+      "path": "questions/fill-blank/v1/index.js",
+      "summaryKeys": ["template.en", "template"],
+      "summaryReplace": {
+        "pattern": "\\{[a-zA-Z0-9_-]+\\}",
+        "replacement": "___"
+      }
+    },
+    "statement-judgment@1": {
+      "path": "questions/statement-judgment/v1/index.js",
+      "summaryKeys": ["stem"]
+    },
+    "structured-descriptive@1": {
+      "path": "questions/structured-descriptive/v1/index.js",
+      "summaryKeys": ["stem"]
+    },
+    "semantic-descriptive@1": {
+      "path": "questions/semantic-descriptive/v1/index.js",
+      "summaryKeys": ["prompt.en", "prompt"]
+    },
+    "semantic-descriptive@2": {
+      "path": "questions/semantic-descriptive/v2/index.js",
+      "summaryKeys": ["prompt.en", "prompt"]
+    },
+    "plot-function@1": {
+      "path": "questions/plot-function/v1/index.js",
+      "summaryKeys": ["stem"]
+    },
+    "comprehension-set@1": {
+      "path": "questions/comprehension-set/v1/index.js",
+      "summaryKeys": ["passage.en", "passage"]
+    },
+    "fill-blank@2": {
+      "path": "questions/fill-blank/v2/index.js",
+      "summaryKeys": ["template.en", "template"],
+      "summaryReplace": {
+        "pattern": "\\{[a-zA-Z0-9_-]+\\}",
+        "replacement": "___"
+      }
+    },
+    "error-correction@1": {
+      "path": "questions/error-correction/v1/index.js",
+      "summaryKeys": ["stem"]
+    },
+    "math-workspace@1": {
+      "path": "questions/math-workspace/v1/index.js",
+      "summaryKeys": ["stem"]
+    }
+  }
+}

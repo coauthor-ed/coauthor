@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "blocks": {
+    "text-block@1": "blocks/text-block/v1/index.js",
+    "content-block@1": {
+      "path": "blocks/content-block/v1/index.js",
+      "summaryKeys": [
+        "markdown.en",
+        "markdown",
+        "markdownRef"
+      ]
+    },
+    "poe-predict@1": {
+      "path": "blocks/poe-predict/v1/index.js",
+      "summaryKeys": [
+        "prompt.en",
+        "prompt",
+        "promptRef"
+      ]
+    },
+    "poe-observe-sim@1": {
+      "path": "blocks/poe-observe-sim/v1/index.js",
+      "summaryKeys": [
+        "prompt.en",
+        "prompt",
+        "promptRef"
+      ]
+    },
+    "poe-explain@1": {
+      "path": "blocks/poe-explain/v1/index.js",
+      "summaryKeys": [
+        "prompt.en",
+        "prompt",
+        "promptRef"
+      ]
+    },
+    "diagram-explore@1": "blocks/diagram-explore/v1/index.js",
+    "reflection@1": {
+      "path": "blocks/reflection/v1/index.js",
+      "summaryKeys": [
+        "prompt.en",
+        "prompt"
+      ]
+    },
+    "mini-game@1": {
+      "path": "blocks/mini-game/v1/index.js",
+      "summaryKeys": [
+        "objective.en",
+        "src"
+      ]
+    }
+  }
+}

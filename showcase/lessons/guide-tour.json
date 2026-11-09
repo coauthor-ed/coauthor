@@ -1,0 +1,11 @@
+{
+  "id": "showcase-guide-tour",
+  "type": "lesson",
+  "subject": "science",
+  "grade": 9,
+  "title": { "en": "Why smells spread" },
+  "blocks": [
+    { "blockRef": "questions/guide-predict.json" },
+    { "blockRef": "blocks/story-preview.json" }
+  ]
+}

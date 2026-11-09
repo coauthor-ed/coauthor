@@ -1,0 +1,359 @@
+/* ── Simulation Canvas Palette ─────────────────────────────────────────────
+ * Canvas 2D cannot resolve CSS var() directly (no cascade context for a raw
+ * fillStyle/strokeStyle string assignment) — these tokens exist so JS code
+ * can read RESOLVED values via getComputedStyle() and cache them (see
+ * src/simulations/base/SimTheme.js's readSimColors()), never assign the
+ * var(...) string itself to a canvas context property. A DOM-based scene
+ * (src/simulations/base/DomSimulation.js) may instead use `var(--sim-…)`
+ * directly in its injected CSS — the DOM/CSS cascade resolves it natively.
+ *
+ * THIS PALETTE IS CLOSED. Scenes consume it, they do not extend it. A new
+ * `--sim-<scene>-*` token cannot be added by a course-bundle author (this
+ * file is engine-owned, not reachable from a content repo) — it would just
+ * permanently render its JS/CSS fallback value, identical in both themes:
+ * a hardcoded color in disguise, which is exactly the bug this file exists
+ * to prevent. If a scene needs N distinguishable colors for N parts, use
+ * `--sim-series-1` … `--sim-series-8` below. If nothing here fits, that is
+ * a signal the palette is missing a generic role — raise it as an
+ * engine-repo change (add the role, not a scene-named token), see
+ * SimTheme.js's header for the migration steps.
+ *
+ * Dark is the app-wide default (matches ThemeManager.init()); light overrides
+ * live in the html[data-theme="light"] block below. Every token must carry
+ * both a dark and a light value.
+ * ────────────────────────────────────────────────────────────────────────── */
+html[data-theme="dark"], :root {
+  /* Canvas backgrounds */
+  --sim-bg-deep:          #0d0a22;   /* deep space blue — default canvas bg */
+  --sim-bg-surface:       #181134;   /* slightly lighter panels */
+  --sim-bg-cell:          #0d1f3c;   /* cell interior */
+  --sim-surface-raised:   #22184a;   /* a card/panel raised one step above bg-surface */
+
+  /* Text */
+  --sim-label:            #fdfaff;   /* label text */
+  --sim-label-muted:      #b6abd8;   /* secondary/caption text */
+  --sim-label-bg:         #1e293bcc; /* label background */
+
+  /* Structure */
+  --sim-stroke:           #5b4f86;   /* generic outline/border, e.g. joints, panel edges */
+
+  /* State */
+  --sim-accent:           #57ccff;   /* buttons, highlights */
+  --sim-accent-hover:     #6366f1;
+  --sim-success:          #54e6a5;
+  --sim-error:            #ff6b5e;
+  --sim-warning:          #ffcf5c;
+
+  /* Map / geography (any scene using SimGeo.js — src/simulations/base/SimGeo.js) */
+  --sim-map-ocean:        #0b1f40;   /* map panel background / sea fill (night sea) */
+  --sim-map-land:         #2f3b58;   /* landmass fill: a step above the sea, so the coast reads */
+  --sim-map-land-stroke:  #7484a8;   /* landmass outline: the coast rim */
+  --sim-map-border:       #94a3b8;   /* faint dashed modern political border, drawn over physical geography */
+  --sim-map-route:        #f59e0b;   /* migration/trade route line */
+  --sim-map-pin:          #ef4444;   /* discovery/city site marker */
+
+  /* Earth materials (geography/geology; any scene showing ground, rock, water, sky).
+     strata-1..6 run top to bottom (young soft to old hard) and stay distinguishable;
+     elev-* is the land ramp (plain to snow), sea-* the depth ramp. */
+  --sim-strata-1:         #e8c07a;   /* sand, topsoil */
+  --sim-strata-2:         #c98b4e;   /* soil, ochre sediment */
+  --sim-strata-3:         #a4603b;   /* clay, red bed */
+  --sim-strata-4:         #7d8c5c;   /* shale, silt */
+  --sim-strata-5:         #6e7394;   /* hard rock, slate */
+  --sim-strata-6:         #4d4262;   /* basement, deep crust */
+  --sim-elev-low:         #45a862;   /* plains, lowland green */
+  --sim-elev-mid:         #b2b85e;   /* plateau, upland */
+  --sim-elev-high:        #a07652;   /* mountain rock */
+  --sim-elev-peak:        #f1f5f9;   /* snow cap */
+  --sim-sea-shallow:      #2bb3c9;   /* shelf, river, lake */
+  --sim-sea-deep:         #164a86;   /* open ocean */
+  --sim-ice:              #cfeaff;   /* glacier, sea ice */
+  --sim-magma:            #ff5a1f;   /* magma, lava, hot mantle */
+  --sim-sky-day:          #5fb4ff;
+  --sim-sky-dusk:         #ff9a6b;
+
+  /* Biology — shared structural/molecular vocabulary across scenes */
+  --sim-membrane:         #4f9cf7;   /* cell membrane blue */
+  --sim-membrane-glow:    #4f9cf733; /* membrane glow (20% alpha) */
+  --sim-cell-wall:        #a3e635;   /* plant cell wall green */
+  --sim-cytoplasm:        #1e3a5f40; /* translucent cytoplasm */
+  --sim-nucleus:          #6366f1;   /* nucleus purple */
+  --sim-nucleus-glow:     #6366f133;
+  --sim-nucleus-stroke:   #4f46e5;   /* nucleus outline (slightly darker than fill) */
+  --sim-mito:             #f59e0b;   /* mitochondria amber */
+  --sim-chloro:           #22c55e;   /* chloroplast green */
+  --sim-er:               #818cf8;   /* ER indigo */
+  --sim-golgi:            #ec4899;   /* golgi pink */
+  --sim-lysosome:         #ef4444;   /* lysosome red */
+  --sim-ribosome:         #94a3b8;   /* ribosome gray */
+  --sim-vacuole:          #06b6d4;   /* vacuole cyan */
+  --sim-water:            #38bdf8;   /* water molecule */
+  --sim-oxygen:           #60a5fa;   /* O₂ */
+  --sim-co2:              #a78bfa;   /* CO₂ */
+  --sim-glucose:          #fbbf24;   /* glucose/sugar */
+  --sim-protein:          #f472b6;   /* protein */
+  --sim-atp:              #34d399;   /* ATP energy packet */
+  --sim-waste:            #78716c;   /* waste material gray */
+  --sim-salt:             #f87171;   /* salt/solute */
+  --sim-nutrient:         #a3e635;   /* generic nutrient */
+
+  /* Categorical series — the answer to "I need N distinguishable colors for
+   * N parts" (legend entries, comparison bars, labelled regions). Adequate
+   * contrast against both --sim-bg-deep and the light theme's background
+   * *as a filled shape* — a canvas region has its own dark stroke/outline
+   * doing a lot of the legibility work, so this palette was never validated
+   * for thin text glyphs. See the *-ink variants below for that case. */
+  --sim-series-1: #38bdf8;   /* sky */
+  --sim-series-2: #fbbf24;   /* amber */
+  --sim-series-3: #34d399;   /* emerald */
+  --sim-series-4: #f472b6;   /* pink */
+  --sim-series-5: #a78bfa;   /* violet */
+  --sim-series-6: #f87171;   /* red */
+  --sim-series-7: #22d3ee;   /* cyan */
+  --sim-series-8: #fb923c;   /* orange */
+
+  /* Text-weight variants of the series colors — for a series color rendered
+   * as small text/glyphs (e.g. mathColorize.js's \textcolor{} equation
+   * coloring) rather than a filled canvas shape with its own dark outline.
+   * In dark theme the series colors already clear WCAG AA (>=4.5:1) against
+   * --bg-panel as-is (5.2-8.6:1 measured), so these are identical here;
+   * the light-theme block below darkens each one until it does too (its
+   * fill-tuned values measured 2.8-5.1:1 against theme.css's light
+   * --bg-panel — several genuinely illegible as text). Same hue per index,
+   * so a scene's filled shape and an equation's colored variable still read
+   * as "the same color family" even though the exact value differs. */
+  --sim-series-1-ink: var(--sim-series-1);
+  --sim-series-2-ink: var(--sim-series-2);
+  --sim-series-3-ink: var(--sim-series-3);
+  --sim-series-4-ink: var(--sim-series-4);
+  --sim-series-5-ink: var(--sim-series-5);
+  --sim-series-6-ink: var(--sim-series-6);
+  --sim-series-7-ink: var(--sim-series-7);
+  --sim-series-8-ink: var(--sim-series-8);
+
+  /* ── Generic roles added by the runtime redesign sprint ───────────────
+     Every one of these was independently invented by course authors as a
+     scene-named token (--sim-parallelogram-muted, --sim-motion-good,
+     --sim-border, --sim-motion-shape ...) and therefore always rendered its
+     JS fallback hex, identical in both themes. They are genuinely cross-scene
+     roles, so they belong here rather than being pushed onto series-N.
+     SimTheme.js's ROLE_ALIASES maps the invented names onto these, which is
+     what makes ~600 existing references theme-aware with no scene edits. */
+  --sim-border:           #5b4f86;   /* outline around a filled shape */
+  --sim-shape:            #57ccff;   /* the primary figure under discussion */
+  --sim-shape-alt:        #ff5ca8;   /* a second figure compared with it */
+  --sim-wedge:            #ffcf5c;   /* a part cut from / added to a shape */
+  --sim-height:           #54e6a5;   /* construction + auxiliary lines */
+  --sim-muted:            #b6abd8;   /* de-emphasised geometry */
+  --sim-good:             #54e6a5;   /* the desirable / correct state */
+  --sim-bad:              #ff8f7a;   /* the undesirable state (not an error) */
+  --sim-danger:           #ff6b5e;   /* a hazard or hard failure */
+  --sim-panel:            #181134;   /* alias of bg-surface, by the name scenes use */
+  --sim-deep:             #0d0a22;   /* alias of bg-deep, likewise */
+  --sim-track:            #2a1f5e;   /* a rail/slot something moves along */
+  --sim-glow:             #57ccff;   /* emphasis halo */
+  --sim-gold:             #ffcf5c;
+  --sim-glass:            #a8d8ff;
+
+  /* Physics / chemistry nouns, mirroring the biology noun family above. */
+  --sim-electron:         #57ccff;
+  --sim-proton:           #ff6b5e;
+  --sim-neutron:          #b6abd8;
+  --sim-cation:           #ff8f7a;
+  --sim-anion:            #57ccff;
+  --sim-force:            #ffcf5c;
+  --sim-flame:            #ff8f3f;
+  --sim-wire:             #b6abd8;
+
+  /* Settings: the kit-owned world behind every scene (SimLook drawBackdrop, SimLookDom .sl-backdrop,
+     SimSvg backdropSvg; packs/look/quill/SPEC.md sec 5). Dark is night, light is day: the same world
+     under two lights. Generic roles, never scene-named; a scene draws none of these itself. */
+  --sim-set-sky-top:      #0c0924;   /* the sky high up (night: deep) */
+  --sim-set-sky-low:      #2a2160;   /* the sky at the horizon (night: lighter indigo) */
+  --sim-set-aurora:       #3fd2b8;   /* night: the aurora ribbon across the upper sky; transparent by day */
+  --sim-set-band:         #c2603a;   /* the band at the horizon: night a warm dusk glow, day the pale band (both at low alpha) */
+  --sim-set-star:         #fff9e6cc; /* night stars; transparent by day */
+  --sim-set-pool:         #6a5fb866; /* night: the pool of light behind the hero; transparent by day */
+  --sim-set-sun:          #ffffff00; /* day: the sun-side light top left and the clouds; transparent by night */
+  --sim-set-ground:       #1b2b3f;   /* the near ground, hills, plain */
+  --sim-set-ground-far:   #262d55;   /* the far ridge: cooler, closer to the sky */
+  --sim-set-water-top:    #10406e;   /* water near the surface */
+  --sim-set-water-deep:   #0a1a3c;   /* water at depth */
+  --sim-set-shaft:        #9fdcff;   /* light shafts, caustics, motes (drawn at low alpha) */
+  --sim-set-sand:         #46415f;   /* the sandy floor under water (night: dim) */
+  --sim-set-parchment:    #5c4836;   /* the parchment floor (night: warm dark tan) */
+  --sim-set-wash-top:     #2c1730;   /* history: the evening wash high up (day: the parchment wall, lit) */
+  --sim-set-wash-low:     #5a2f3e;   /* history: the wash down at the floor (day: the parchment wall, warm) */
+  /* casefile (an opt-in per-course desk, packs/look/plain/SPEC.md sec 8): a desk edge, a manila folder, a ruled
+     paper card. Dark is a desk under a dim lamp, light a desk by day. */
+  --sim-set-desk:         #0c0a08;   /* the desk round the folder (night: near black, warm) */
+  --sim-set-folder:       #2e2418;   /* the manila folder and its tab (night: darker than the card) */
+  --sim-set-folder-edge:  #1d170f;   /* the folder's back flap and fold */
+  --sim-set-card:         #3e372d;   /* the paper card the figure sits on (night: warm paper under a dim lamp) */
+  --sim-set-rule:         #4a4237;   /* the faint ruled lines on the card */
+  --sim-set-paper:        #4d4438;   /* forms, index cards and panels on the card (the scene's surface on this setting) */
+  --sim-set-shade:        #0a070594; /* night: the falloff away from the lamp at the card's edges; transparent by day */
+
+  /* Annotation (SimAnnotate, packs/look/plain/SPEC.md sec 4): what the beat is about. A look sets it to its
+     signature colour (plain: the course accent); tint is the callout box and the highlighter. */
+  --sim-annot:            #ff7d93;
+  --sim-annot-tint:       #ff7d9333;
+
+  /* Canvas text. Was hardcoded as "Inter, system-ui" in ~661 places. */
+  --sim-font:             'Nunito', system-ui, sans-serif;
+  --sim-font-display:     'Fredoka', 'Nunito', system-ui, sans-serif;
+  --sim-font-mono:        'Nunito Rupee', 'Courier Prime', 'Courier New', ui-monospace, monospace;
+  --sim-font-numeral:     var(--sim-font-display);  /* one big reading (.sim-numeral); plain sets a serif */
+}
+
+html[data-theme="light"] {
+  /* Canvas backgrounds */
+  --sim-bg-deep:          #f3f0ff;
+  --sim-bg-surface:       #ffffff;
+  --sim-bg-cell:          #e0e9f5;
+  --sim-surface-raised:   #f8fafc;
+
+  /* Text */
+  --sim-label:            #241a4d;
+  --sim-label-muted:      #6b6291;
+  --sim-label-bg:         #e2e8f0cc;
+
+  /* Structure */
+  --sim-stroke:           #94a3b8;
+
+  /* State */
+  --sim-accent:           #0b6fa8;
+  --sim-accent-hover:     #4338ca;
+  --sim-success:          #0d8f5f;
+  --sim-error:            #d13d31;
+  --sim-warning:          #b07a00;
+
+  /* Map / geography */
+  --sim-map-ocean:        #bfd9f3;
+  --sim-map-land:         #efe7d3;   /* warm cream land on a blue sea, the classroom atlas */
+  --sim-map-land-stroke:  #8e8a7c;
+  --sim-map-border:       #64748b;
+  --sim-map-route:        #d97706;
+  --sim-map-pin:          #dc2626;
+
+  --sim-strata-1:         #e2b56a;
+  --sim-strata-2:         #c07a3c;
+  --sim-strata-3:         #97542f;
+  --sim-strata-4:         #6f7f4c;
+  --sim-strata-5:         #5b607c;
+  --sim-strata-6:         #3f3550;
+  --sim-elev-low:         #4caf62;
+  --sim-elev-mid:         #b3ba62;
+  --sim-elev-high:        #8f6a48;
+  --sim-elev-peak:        #e3eaf3;
+  --sim-sea-shallow:      #4cc0d6;
+  --sim-sea-deep:         #1d5a9c;
+  --sim-ice:              #bfe3fa;
+  --sim-magma:            #f04a12;
+  --sim-sky-day:          #8fd0ff;
+  --sim-sky-dusk:         #ffb38a;
+
+  /* Biology */
+  --sim-membrane:         #2563eb;
+  --sim-membrane-glow:    #2563eb33;
+  --sim-cell-wall:        #65a30d;
+  --sim-cytoplasm:        #93c5fd40;
+  --sim-nucleus:          #4f46e5;
+  --sim-nucleus-glow:     #4f46e533;
+  --sim-nucleus-stroke:   #3730a3;
+  --sim-mito:             #d97706;
+  --sim-chloro:           #16a34a;
+  --sim-er:               #4f46e5;
+  --sim-golgi:            #db2777;
+  --sim-lysosome:         #dc2626;
+  --sim-ribosome:         #475569;
+  --sim-vacuole:          #0891b2;
+  --sim-water:            #0284c7;
+  --sim-oxygen:           #2563eb;
+  --sim-co2:              #7c3aed;
+  --sim-glucose:          #d97706;
+  --sim-protein:          #db2777;
+  --sim-atp:              #059669;
+  --sim-waste:            #57534e;
+  --sim-salt:             #dc2626;
+  --sim-nutrient:         #65a30d;
+
+  /* Categorical series */
+  --sim-series-1: #0284c7;
+  --sim-series-2: #d97706;
+  --sim-series-3: #059669;
+  --sim-series-4: #db2777;
+  --sim-series-5: #7c3aed;
+  --sim-series-6: #dc2626;
+  --sim-series-7: #0891b2;
+  --sim-series-8: #ea580c;
+
+  /* Text-weight variants — see the dark block's doc comment above. Each is
+   * the same hue as its --sim-series-N above, darkened just until it clears
+   * 4.5:1 against both --bg-panel (#f3f0ff) and --bg-surface (#ffffff) from
+   * theme.css (measured 4.6-4.65:1 — a deliberately thin margin over the
+   * 4.5:1 floor, not a rounding accident, so the color stays as close to its
+   * --sim-series-N counterpart as WCAG AA allows). --sim-series-5 needed no
+   * change — #7c3aed already clears both (5.08:1 / 5.70:1). */
+  --sim-series-1-ink: #0273ae;
+  --sim-series-2-ink: #a55a05;
+  --sim-series-3-ink: #047c57;
+  --sim-series-4-ink: #cd226e;
+  --sim-series-5-ink: #7c3aed;
+  --sim-series-6-ink: #d42222;
+  --sim-series-7-ink: #077793;
+  --sim-series-8-ink: #bc470a;
+
+  /* Light values for the generic roles added by the sprint. */
+  --sim-border:           #9a8fc4;
+  --sim-shape:            #0b6fa8;
+  --sim-shape-alt:        #c4327e;
+  --sim-wedge:            #b07a00;
+  --sim-height:           #0d8f5f;
+  --sim-muted:            #6b6291;
+  --sim-good:             #0d8f5f;
+  --sim-bad:              #c2410c;
+  --sim-danger:           #d13d31;
+  --sim-panel:            #ffffff;
+  --sim-deep:             #f3f0ff;
+  --sim-track:            #e6e0f5;
+  --sim-glow:             #0b6fa8;
+  --sim-gold:             #b07a00;
+  --sim-glass:            #2b6fd6;
+
+  --sim-electron:         #0b6fa8;
+  --sim-proton:           #d13d31;
+  --sim-neutron:          #6b6291;
+  --sim-cation:           #c2410c;
+  --sim-anion:            #0b6fa8;
+  --sim-force:            #b07a00;
+  --sim-flame:            #c2410c;
+  --sim-wire:             #6b6291;
+
+  /* Settings by day (see the dark block). */
+  --sim-set-sky-top:      #b9dcff;
+  --sim-set-sky-low:      #eef2ff;
+  --sim-set-aurora:       #3fd2b800;
+  --sim-set-band:         #ffd9b0;
+  --sim-set-star:         #ffffff00;
+  --sim-set-pool:         #ffffff00;
+  --sim-set-sun:          #ffffffb3;
+  --sim-set-ground:       #c9e0c2;
+  --sim-set-ground-far:   #d5deef;
+  --sim-set-water-top:    #d6f1fa;
+  --sim-set-water-deep:   #8cc9e3;
+  --sim-set-shaft:        #ffffff;
+  --sim-set-sand:         #e8d8b4;
+  --sim-set-parchment:    #efe2c4;
+  --sim-set-wash-top:     #f7ecd6;
+  --sim-set-wash-low:     #f1dfc0;
+  --sim-set-desk:         #2f3b3e;
+  --sim-set-folder:       #e0c88f;
+  --sim-set-folder-edge:  #c6a965;
+  --sim-set-card:         #fbf7ec;
+  --sim-set-rule:         #ebe1ca;
+  --sim-set-paper:        #fffdf8;
+  --sim-set-shade:        #00000000;
+  --sim-annot:            #c42a52;
+  --sim-annot-tint:       #c42a521f;
+}

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "default": "quill",
+  "looks": {
+    "quill": {
+      "css": null,
+      "modes": ["classic", "story"],
+      "fonts": ["vendor/fonts/app-fonts.css", "vendor/fonts/story-fonts.css"],
+      "simProfile": "src/simulations/base/kit/looks/quill.js",
+      "reactor": "src/looks/quill/reactor.js",
+      "brand": "src/looks/quill/brand.js",
+      "gamification": true
+    },
+    "plain": {
+      "css": "src/looks/plain/look.css",
+      "modes": ["classic"],
+      "fonts": ["vendor/fonts/plain-fonts.css"],
+      "simProfile": "src/simulations/base/kit/looks/plain.js",
+      "reactor": "src/looks/plain/reactor.js",
+      "brand": "src/looks/plain/brand.js",
+      "gamification": false,
+      "theme": "light"
+    }
+  }
+}

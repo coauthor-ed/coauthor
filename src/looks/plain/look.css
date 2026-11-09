@@ -1,0 +1,716 @@
+/* plain: an editorial explainer (look pack plain SPEC, 2026-11-04 rewrite):
+   the register of a good data-journalism feature. Serif headlines over a
+   humanist sans, navy as the lead, the course signature colour (data-accent,
+   blue by default) on rules, kickers, the drop cap, pull quotes and the
+   current slide, and real, muted print colours for the categorical accents.
+   The display serif only at display sizes; everything small in the sans.
+   Warm paper in light; warm ink on deep blue-black in dark. Motion is a quiet
+   fade with a small rise: no spring, no overshoot, no press travel. Classic
+   only, so there are no per-mode blocks. Colour values live here (invariant
+   9), including the plain values of the closed --sim-* palette and the scene
+   annotation tokens --sim-annot / --sim-annot-tint. Faces:
+   vendor/fonts/plain-fonts.css, linked by the registry. */
+html[data-look="plain"] {
+  /* Serif headings over a humanist sans. The stacks fall back to the system. */
+  --font-family: 'Instrument Sans', 'Source Sans 3', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', 'Liberation Sans', Arial, sans-serif;
+  --font-heading: 'Antic Didone', 'Source Serif 4', Charter, 'Bitstream Charter', 'Iowan Old Style', 'Palatino Linotype', 'Liberation Serif', Georgia, serif;
+  --font-ui: var(--font-family);
+  --heading-weight: 400;
+  /* Display serif for step numerals and big readings (the numeral class
+     .plain-numeral in theme.css and --sim-font-numeral for scenes). */
+  --font-display: 'Antic Didone', 'Source Serif 4', Georgia, serif;
+  /* The display serif is for display sizes only (>= 24px: titles, big
+     numerals, pull quotes). A small label that reads --font-heading under
+     Quill (a badge, an avatar initial) takes --font-label: the text sans. */
+  --font-label: var(--font-family);
+  /* Beats (ProgressiveDisclosureMixin): the newly current beat fades up
+     6px over --motion-reveal once its text is rendered; the one before it
+     dims to --reveal-past-opacity in --reveal-past-color (>= 4.5:1). */
+  --beat-enter: rv-beat-in;
+  --reveal-past-color: var(--text-main);
+  --reveal-past-opacity: 0.7;
+
+  --bg-base: #fbfaf4;
+  --bg-surface: #fdfdf9;
+  --bg-panel: #f1f1e8;
+  --bg-panel-2: #e8e7dc;
+  --bg-sunken: #f1f1e8;
+  --text-main: #1f1614;
+  --text-soft: #3b302d;
+  --text-muted: #594d48;
+  --border-color: #d5cfc2;
+  --border-hover: #b2aa9d;
+
+  /* One ink, one accent (the course signature colour, below) and one
+     highlighter. The primary is the signature; the primary button is the
+     highlighter with an ink rule (--btn-primary-*, src/ui/sharedStyles.js). */
+  --primary-color: var(--signature);
+  --primary-hover: var(--signature-deep);
+  --primary-light: var(--signature-tint);
+  --on-primary: #ffffff;
+  --on-accent: #ffffff;
+  --primary-text: var(--signature-ink);
+  --highlight: #ddfc6e;
+  --highlight-soft: #edfbca;
+  --highlight-hover: #eaffaa;
+  --highlight-ink: #1f1614;
+  --btn-primary-bg: var(--highlight);
+  --btn-primary-ink: var(--highlight-ink);
+  --btn-primary-border: 1px solid var(--text-main);
+  --btn-primary-hover: var(--highlight-hover);
+
+  /* Navy leads; the course signature colour (below, per data-accent) marks
+     the beat. The categorical accents keep muted, print-like hues of their
+     own (2026-11-04: collapsing them all to navy and brass read as grey). */
+  --accent-teal: #1f6f6b;
+  --accent-coral: #b5523a;
+  --accent-amber: #946410;
+  --accent-gold: #b08c48;
+  --accent-violet: #5d4a8f;
+  --accent-blue: #2c5a8f;
+
+  --gradient-hero: linear-gradient(135deg, #15304c 0%, #1f4569 100%);
+  --gradient-card: linear-gradient(#fdfdf9, #fdfdf9);
+  --gradient-banner: linear-gradient(135deg, #e3eaf1 0%, #ece6d9 100%);
+  --gradient-gold: linear-gradient(135deg, #b08c48 0%, #85622a 100%);
+  --gradient-teal: linear-gradient(135deg, #1f6f6b 0%, #2a827c 100%);
+
+  --success-bg: #e7f0ea;
+  --success-text: #25593f;
+  --error-bg: #f8e8df;
+  --error-text: #a0401a;
+  --warn-bg: #f4eedf;
+  --warn-text: #6b531c;
+  --info-bg: #e6ecf2;
+  --info-text: #1c3d60;
+
+  /* Slide figures (graph series, photo-diagram tones) share the scene
+     series: 1-3 blue, ochre, plum; 4 the grey for "the rest"; 5-6 the
+     muted teal and rust, for old content only. */
+  --content-series-1: #2d5f96;
+  --content-series-2: #b47e2c;
+  --content-series-3: #934a7b;
+  --content-series-4: #7c828a;
+  --content-series-5: #3e7f86;
+  --content-series-6: #a14a3c;
+
+  --mw-ok-fill: #25593f;
+  --mw-ok-lip: #25593f;
+  --mw-bad-fill: #a0401a;
+  --mw-bad-lip: #a0401a;
+  --mw-gold-fill: #85622a;
+  --mw-gold-lip: #85622a;
+  --mw-on-fill: #ffffff;
+  --mw-deep: #17202b;
+  --mw-shine: transparent;
+  --mw-board-bg: #f0ede5;
+  --mw-board-dot: #e3dfd5;
+  --mw-moved-bg: #e6ecf2;
+  --mw-moved-ink: #142d49;
+  --mw-moved-lip: #1c3d60;
+
+  --shell-btn-bg: transparent;
+  --shell-btn-hover: #f1f1e8;
+  --sidebar-bg: #fdfdf9;
+  --sidebar-hover: #f0ede5;
+  --sidebar-active: var(--signature-tint);
+  --sidebar-active-text: var(--signature-ink);
+
+  /* Rules, not cards: no shadows on the page. Only a dialog over the page
+     keeps one (it really is above it). */
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: 0 0 40px rgb(31 22 20 / 0.14);
+  --shadow-primary: none;
+  --card-shadow: none;
+  --shadow-dialog: 0 0 40px rgb(31 22 20 / 0.14);
+
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 6px;
+  --radius-lg: 6px;
+  --radius-xl: 6px;
+  --radius-pill: 6px;
+  --radius-tile: 4px;
+  --radius-tile-sm: 4px;
+  --radius-callout: 0px;
+  --radius-btn-lg: 7px;
+  --radius-icon-btn: 6px;
+  --radius-kbd: 3px;
+
+  --fs-display: clamp(2rem, 3.4vw, 2.6rem);
+  --fs-h1: clamp(1.7rem, 3vw, 2.25rem);
+  --fs-h2: 1.4rem;
+  --fs-h3: 1.1rem;
+  --lh-tight: 1.2;
+  --lh-body: 1.6;
+  --fs-greeting: var(--fs-h1);
+  --fs-hero: clamp(1.5rem, 2.6vw, 1.95rem);
+  --fs-stem: 1.1rem;
+  --lh-stem: 1.55;
+  --fw-stem: 400;
+  --fw-medium: 500;
+  --fw-strong: 500;
+  --fw-heavy: 600;
+  --fw-black: 600;
+  --fw-feedback: 500;
+
+  /* Optional component tokens (unset under Quill; see each component). */
+  /* The hero is a book page: paper, a navy head rule, a cover beside it. */
+  --hero-surface: var(--bg-surface);
+  --hero-rule: var(--border-color);
+  --hero-ink: var(--text-main);
+  --hero-soft: var(--text-soft);
+  --hero-muted: var(--text-muted);
+  --hero-kicker: var(--card-kicker);
+  --hero-cta-bg: var(--primary-color);
+  --hero-cta-ink: var(--on-primary);
+  --hero-head-rule: var(--signature);
+
+  /* Course covers (<plain-cover>, brand.js): four tones, picked per course.
+     bg = the board, ink = the initials, rule = the pattern and frame,
+     sub = the subject in small caps. */
+  --cover-1-bg: #1c3d60;
+  --cover-1-ink: #ffffff;
+  --cover-1-rule: rgb(255 255 255 / 0.26);
+  --cover-1-sub: #e3cb97;
+  --cover-2-bg: #3a4c60;
+  --cover-2-ink: #ffffff;
+  --cover-2-rule: rgb(255 255 255 / 0.24);
+  --cover-2-sub: #dfe6ee;
+  --cover-3-bg: #e4dfd2;
+  --cover-3-ink: #1c3d60;
+  --cover-3-rule: rgb(28 61 96 / 0.24);
+  --cover-3-sub: #85622a;
+  --cover-4-bg: #efe6d2;
+  --cover-4-ink: #5e4418;
+  --cover-4-rule: rgb(133 98 42 / 0.30);
+  --cover-4-sub: #85622a;
+  --cover-accent: #b08c48;
+
+  /* Editorial rules and the paper's faint grain (a two-stop wash, no image). */
+  --rule-strong: #1f1614;
+  --rule-soft: #d5cfc2;
+  --meter-track: #d5cfc2;
+  --meter-fill: var(--signature);
+  --paper-wash: none;
+  --seg-h: 3px;
+  --bar-fill: var(--primary-color);
+  --seg-gap: 6px;
+  --seg-border: 0;
+  --seg-tick-opacity: 0;
+  --raise-rest: none;
+  --raise-hover: none;
+  --raise-hover-rule: #c6c1b4;
+  --card-icon-hover: none;
+  --card-kicker: var(--signature-ink);
+  --kicker-tracking: 0.1em;
+  --opt-key-correct: #25593f;
+  --motion-entrance: 240ms;
+  --appbar-bg: var(--bg-base);
+  --beat-dot-anim: none;
+  --option-press: 0px;
+  --stage-btn-radius: 6px;
+  --stage-btn-border: 1px solid var(--border-hover);
+  --stage-btn-bg: var(--bg-surface);
+  --stage-sep-w: 1px;
+  --verdict-rule-good: #a9c8b6;
+  --verdict-rule-bad: #e2b39c;
+  --verdict-rule-warn: #d7c79a;
+  --verdict-rule-info: #b9c9d9;
+
+  /* No lip, no press travel. The press tokens carry a soft shadow instead. */
+  --press-1: 0 1px 2px -1px;
+  --press-2: 0 1px 2px -1px;
+  --press-travel: 0px;
+  --rule-w: 1px;
+  --lip: 0 0 0;
+  --lip-color: rgb(22 38 60 / 0.10);
+  --press-travel-sm: 0px;
+  --hover-lift: -1px;
+  --rule-w-fixed: 1px;
+  --rule-w-bold: 1px;
+  --lip-fixed: 0 0 0;
+  --lip-tile: 0 0 0;
+  --kbd-lip-w: 1px;
+  --lesson-num-size: 36px;
+  --lesson-num-size-sm: 32px;
+  --reveal-bar-w: 2px;
+  --hero-art-bg: var(--bg-panel);
+  --card-banner-h: 64px;
+  --card-banner-bg: linear-gradient(135deg, #e3eaf1 0%, #ece6d9 100%);
+  --card-banner-ink: var(--primary-text);
+  --card-banner-track: #c6cfd8;
+  --action-bar-opacity: 100%;
+
+  --stage-head-bg: #fbfaf4;
+  --stage-head-ink: #1f1614;
+  --bubble-fill: #ffffff;
+  --bubble-ink: #e3dfd5;
+  --opt-key-radius: 5px;
+  --opt-key-bg: #f6f4ee;
+  --opt-key-ink: #17202b;
+  --opt-hover-tilt: 0deg;
+
+  --focus-ring: 2px solid var(--signature);
+
+  --hint-ink: var(--warn-text);
+  --hint-accent: var(--warn-text);
+  --hint-rule: var(--warn-text);
+  --hint-shadow: transparent;
+
+  /* Nothing overshoots; a fade with a small rise. */
+  --ease-spring: cubic-bezier(0.2, 0, 0, 1);
+  --ease-settle: cubic-bezier(0.2, 0, 0, 1);
+  --motion-fast: 140ms;
+  --motion-base: 180ms;
+  --motion-slow: 240ms;
+  --motion-reveal: 220ms;
+  --motion-reveal-rise: 6px;
+  --motion-reveal-ease: cubic-bezier(0.2, 0, 0, 1);
+  --bounce: 0;
+  --ease-pop: cubic-bezier(0.2, 0, 0, 1);
+  --ease-overshoot: cubic-bezier(0.2, 0, 0, 1);
+  --rise-distance: 6px;
+  --spin-from: none;
+
+  --glass-bg: #fbfaf4;
+  --glass-blur: 0px;
+  --cosmos-star: transparent;
+  --surface-card: #fdfdf9;
+  --scrim: rgb(16 26 40 / 0.45);
+
+  /* The scene palette (sim-theme.css names, plain values). The biology, map
+     and earth nouns keep their own hues: there the colour is the subject. */
+  --sim-bg-deep: #fbfaf4;
+  --sim-bg-surface: #fdfdf9;
+  --sim-bg-cell: #e6e2d8;
+  --sim-surface-raised: #f0ede5;
+  --sim-label: #1f1614;         /* the page ink: scene text and prose are one ink (2026-11-05) */
+  --sim-label-muted: #594d48;
+  --sim-label-bg: #ffffffe0;
+  --sim-stroke: #858b92;
+  --sim-border: #858b92;
+  --sim-muted: #58616d;
+  --sim-track: #d5cfc2;         /* also the hairline of a ruled table grid (SimPanel), as --border-color */
+  --sim-accent: #1c3d60;
+  --sim-accent-hover: #142d49;
+  --sim-glow: #1c3d60;
+  --sim-success: #25593f;
+  --sim-good: #25593f;
+  --sim-error: #b8481d;
+  --sim-danger: #b8481d;
+  --sim-bad: #b8481d;
+  --sim-warning: #85622a;
+  --sim-gold: #85622a;
+  --sim-deep: #f6f4ee;
+  --sim-panel: #fdfdf9;
+  --sim-shape: #1c3d60;
+  --sim-shape-alt: #8c5a2b;
+  --sim-wedge: #85622a;
+  --sim-height: #25593f;
+  --sim-glass: #5a7a96;
+  --sim-electron: #1c3d60;
+  --sim-proton: #8b2e28;
+  --sim-neutron: #5c626c;
+  --sim-cation: #8b2e28;
+  --sim-anion: #1c3d60;
+  --sim-force: #85622a;
+  --sim-flame: #a4551f;
+  --sim-wire: #5c626c;
+  /* Series: print-like, muted. 1-3 are the ones a figure uses (blue, ochre,
+     plum: apart in lightness and hue, so they hold for red-green colour
+     blindness too); 8 is the grey for "other" or "the rest". 4-7 exist for
+     old scenes only. */
+  --sim-series-1: #2d5f96;
+  --sim-series-2: #b47e2c;
+  --sim-series-3: #934a7b;
+  --sim-series-4: #3e7f86;
+  --sim-series-5: #5b5f99;
+  --sim-series-6: #a14a3c;
+  --sim-series-7: #5f7f45;
+  --sim-series-8: #7c828a;
+  --sim-series-1-ink: #2d5f96;
+  --sim-series-2-ink: #8a5e1e;
+  --sim-series-3-ink: #934a7b;
+  --sim-series-4-ink: #2f666c;
+  --sim-series-5-ink: #5b5f99;
+  --sim-series-6-ink: #a14a3c;
+  --sim-series-7-ink: #4b6636;
+  --sim-series-8-ink: #5a6068;
+
+  /* Progress: done slides in the highlighter, the current one in the
+     signature colour, the rest a rule. */
+  --seg-done: var(--highlight);
+  --seg-track: #d5cfc2;
+  --seg-now: var(--signature);
+}
+
+/* The course signature colour (bundle.json "accent", SPEC sec 1): rules,
+   kickers, the drop cap, pull quotes, the current slide; for scenes
+   --sim-annot / --sim-annot-tint (annotations). Blue unless the course
+   names another (2026-11-05: the prototype's blue beside the lime
+   highlighter; crimson beside lime did not hold). -ink is the text-safe
+   shade, -tint the pale fill. */
+html[data-look="plain"] {
+  --signature: #1a5cdf;
+  --signature-ink: #0d45b0;
+  --signature-deep: #0d45b0;
+  --signature-tint: #dcedff;
+  --sim-annot: var(--signature);
+  --sim-annot-tint: var(--signature-tint);
+}
+/* The lesson page (AppShell immersive main): no bottom pad under the fixed
+   footer's clearance, so a slide sized to the stage budget does not scroll;
+   on a phone a slimmer top, so the slide starts higher. */
+html[data-look="plain"] { --shell-main-pad-bottom: 0px; }
+@media (max-width: 600px) {
+  html[data-look="plain"] { --shell-main-pad-top: 4px; }
+}
+/* Crimson leans to raspberry and --sim-bad to vermilion, so the two never meet. */
+html[data-look="plain"][data-accent="crimson"] { --signature: #a51d36; --signature-ink: #a51d36; --signature-deep: #85152a; --signature-tint: #f7e4e5; }
+html[data-look="plain"][data-accent="teal"] { --signature: #0d6b68; --signature-ink: #0b605d; --signature-deep: #0a5552; --signature-tint: #dcefec; }
+html[data-look="plain"][data-accent="indigo"] { --signature: #3d3fa0; --signature-ink: #3d3fa0; --signature-deep: #2f3180; --signature-tint: #e7e7f7; }
+html[data-look="plain"][data-accent="ochre"] { --signature: #a8650a; --signature-ink: #8a5208; --signature-deep: #7a4806; --signature-tint: #f6ead3; }
+html[data-look="plain"][data-accent="green"] { --signature: #2d6a2a; --signature-ink: #2a6227; --signature-deep: #22521f; --signature-tint: #e2efdb; }
+html[data-look="plain"][data-accent="blue"] { --signature: #1a5cdf; --signature-ink: #0d45b0; --signature-deep: #0d45b0; --signature-tint: #dcedff; }
+
+/* figure field (src/core/components/FigureLayouts.js): plain's editorial figure, signature
+   colour = the course accent; and the casefile setting (bundle simSetting, SPEC sec 8). Since
+   2026-11-05 the casefile is quiet under plain: no desk, no folder fill, no shadow; the page
+   paper, a hairline folder rule with its tab, the cards flat on it. */
+html[data-look="plain"] {
+  --fig-desk: #fbfaf4; --fig-ground: #fbfaf4; --fig-card: #fdfdf9; --fig-edge: #d5cfc2; --fig-rule: #e8e4d9;
+  --fig-ink: #1f1614; --fig-muted: #594d48; --fig-lead: #1c3d60; --fig-lead-tint: #e4ebf3;
+  --fig-sig: var(--signature); --fig-sig-tint: var(--signature-tint); --fig-ghost: #cfc9bc;
+  --fig-s1: #2d5f96; --fig-s2: #b47e2c; --fig-s3: #934a7b; --fig-s4: #3e7f86; --fig-s5: #5b5f99; --fig-grey: #7c828a;
+  --fig-shadow: transparent; --fig-tab: #fbfaf4; --fig-ring: #e6e0d4; --fig-arrow: #1c3d60; --fig-tab-ink: #15191f;
+  --fig-r: 4px;
+  --fig-case-desk: #fbfaf4; --fig-case-ground: #fbfaf4; --fig-case-card: #fdfdf9; --fig-case-edge: #d5cfc2; --fig-case-rule: #ece8de;
+  --fig-case-ink: #1f1614; --fig-case-muted: #594d48; --fig-case-lead: #1f4e79; --fig-case-lead-tint: #e2eaf2;
+  --fig-case-sig: var(--signature-ink); --fig-case-sig-tint: var(--signature-tint); --fig-case-ghost: #b2aa9d;
+  --fig-case-s1: #2d5f96; --fig-case-s2: #b47e2c; --fig-case-s3: #934a7b; --fig-case-s4: #3e7f86; --fig-case-s5: #5b5f99; --fig-case-grey: #7c828a;
+  --fig-case-shadow: transparent; --fig-case-tab: #fbfaf4; --fig-case-ring: #e8e4d9; --fig-case-arrow: #1f1614; --fig-case-tab-ink: #1f1614;
+  /* The casefile on scenes (sim-theme.css --sim-set-*): quiet, the same as the figure field.
+     The kit reads the LookProfile key casefile: 'quiet' and draws only the folder rule, its
+     tab and the card (SimLook drawCasefile, SimWorld). */
+  --sim-set-desk: #fbfaf4; --sim-set-folder: #fbfaf4; --sim-set-folder-edge: #b2aa9d; --sim-set-card: #fbfaf4;
+  --sim-set-rule: #ece8de; --sim-set-paper: #fdfdf9; --sim-set-shade: transparent;
+}
+
+html[data-look="plain"][data-theme="dark"] {
+  /* Warm ink paper by night: a near-black brown, not slate. */
+  --bg-base: #15120f;
+  --bg-surface: #1b1814;
+  --bg-panel: #24201b;
+  --bg-panel-2: #2c2823;
+  --bg-sunken: #120f0d;
+  --text-main: #eae8df;
+  --text-soft: #cdcac2;
+  --text-muted: #a5a198;
+  --border-color: #3a3630;
+  --border-hover: #57524a;
+
+  --primary-color: var(--signature);
+  --primary-hover: var(--signature-deep);
+  --primary-light: var(--signature-tint);
+  --on-primary: #15120f;
+  --on-accent: #15120f;
+  --primary-text: var(--signature-ink);
+  --highlight: #cae763;
+  --highlight-soft: #2c350e;
+  --highlight-hover: #d6ee85;
+  --highlight-ink: #15120f;
+  --btn-primary-border: 1px solid var(--highlight);
+
+  --accent-teal: #6cbdb5;
+  --accent-coral: #ec977d;
+  --accent-amber: #deb05d;
+  --accent-gold: #cfae6c;
+  --accent-violet: #b2a1e0;
+  --accent-blue: #8fb6e3;
+
+  --gradient-hero: linear-gradient(135deg, #1a3049 0%, #23425f 100%);
+  --gradient-card: linear-gradient(180deg, #171e2a 0%, #151b26 100%);
+  --gradient-banner: linear-gradient(135deg, #23303e 0%, #2c2c2b 100%);
+  --gradient-gold: linear-gradient(135deg, #c8a768 0%, #a98a4e 100%);
+  --gradient-teal: linear-gradient(135deg, #16403e 0%, #1d524f 100%);
+
+  --success-bg: #1c2e26;
+  --success-text: #92c9a9;
+  --error-bg: #35231a;
+  --error-text: #f2a57f;
+  --warn-bg: #2d291b;
+  --warn-text: #d6c088;
+  --info-bg: #1d2a3c;
+  --info-text: #a2c3e6;
+
+  --content-series-1: #6090cc;
+  --content-series-2: #b98b36;
+  --content-series-3: #a8669a;
+  --content-series-4: #9aa0a8;
+  --content-series-5: #6fa9ae;
+  --content-series-6: #c97a6b;
+
+  --mw-ok-fill: #92c9a9;
+  --mw-ok-lip: #92c9a9;
+  --mw-bad-fill: #f2a57f;
+  --mw-bad-lip: #f2a57f;
+  --mw-gold-fill: #9cbfe0;
+  --mw-gold-lip: #9cbfe0;
+  --mw-on-fill: #0f1620;
+  --mw-deep: #0c0e11;
+  --mw-shine: transparent;
+  --mw-board-bg: #1b2230;
+  --mw-board-dot: #262f3f;
+  --mw-moved-bg: #22303e;
+  --mw-moved-ink: #cfe0ef;
+  --mw-moved-lip: #9cbfe0;
+
+  --shell-btn-bg: transparent;
+  --shell-btn-hover: #24201b;
+  --sidebar-bg: #1b1814;
+  --sidebar-hover: #24201b;
+  --sidebar-active: var(--signature-tint);
+  --sidebar-active-text: var(--signature-ink);
+  --shadow-sm: none;
+  --shadow-md: none;
+  --shadow-lg: 0 0 40px rgb(0 0 0 / 0.5);
+  --shadow-primary: none;
+  --card-shadow: none;
+  --shadow-dialog: 0 0 40px rgb(0 0 0 / 0.5);
+  --lip-color: rgb(0 0 0 / 0.25);
+  --card-banner-bg: linear-gradient(135deg, #23303e 0%, #2e2c28 100%);
+  --card-banner-track: #3b4659;
+
+  --hero-head-rule: var(--signature);
+
+  --cover-1-bg: #1f3a57;
+  --cover-1-ink: #ecebe5;
+  --cover-1-rule: rgb(255 255 255 / 0.18);
+  --cover-1-sub: #d6b983;
+  --cover-2-bg: #29333f;
+  --cover-2-ink: #ecebe5;
+  --cover-2-rule: rgb(255 255 255 / 0.16);
+  --cover-2-sub: #b9c6d3;
+  --cover-3-bg: #232a33;
+  --cover-3-ink: #cfe0ef;
+  --cover-3-rule: rgb(156 191 224 / 0.22);
+  --cover-3-sub: #d6b983;
+  --cover-4-bg: #2e2a23;
+  --cover-4-ink: #e9dcc0;
+  --cover-4-rule: rgb(214 185 131 / 0.24);
+  --cover-4-sub: #d6b983;
+  --cover-accent: #c8a768;
+
+  --rule-strong: #eae8df;
+  --rule-soft: #3a3630;
+  --meter-track: #3a3630;
+  --meter-fill: var(--signature);
+  --paper-wash: none;
+  --raise-rest: none;
+  --raise-hover: none;
+  --raise-hover-rule: #57524a;
+  --card-kicker: var(--signature-ink);
+  --opt-key-correct: #92c9a9;
+  --verdict-rule-good: #3b5a4b;
+  --verdict-rule-bad: #6b4433;
+  --verdict-rule-warn: #5f5536;
+  --verdict-rule-info: #3e556b;
+
+  --stage-head-bg: #15120f;
+  --stage-head-ink: #eae8df;
+  --bubble-fill: #1b1814;
+  --bubble-ink: #3a3630;
+  --opt-key-bg: #24201b;
+  --opt-key-ink: #eae8df;
+
+  --focus-ring: 2px solid var(--signature);
+
+  --glass-bg: #15120f;
+  --surface-card: #1b1814;
+  --scrim: rgb(0 0 0 / 0.55);
+
+  --sim-bg-deep: #15120f;
+  --sim-bg-surface: #1b1814;
+  --sim-bg-cell: #24201b;
+  --sim-surface-raised: #24201b;
+  --sim-label: #eae8df;
+  --sim-label-muted: #a89f92;
+  --sim-label-bg: #1b1814d9;
+  --sim-stroke: #6d727a;
+  --sim-border: #6d727a;
+  --sim-muted: #a89f92;
+  --sim-track: #3a3630;
+  --sim-accent: #a2c3e6;
+  --sim-accent-hover: #bdd5ee;
+  --sim-glow: #a2c3e6;
+  --sim-success: #92c9a9;
+  --sim-good: #92c9a9;
+  --sim-error: #f29a6c;
+  --sim-danger: #f29a6c;
+  --sim-bad: #f29a6c;
+  --sim-warning: #d6c088;
+  --sim-gold: #d6c088;
+  --sim-deep: #15120f;
+  --sim-panel: #1b1814;
+  --sim-shape: #a2c3e6;
+  --sim-shape-alt: #d0a67c;
+  --sim-wedge: #d6c088;
+  --sim-height: #92c9a9;
+  --sim-glass: #9db7cc;
+  --sim-electron: #a2c3e6;
+  --sim-proton: #e3a9a2;
+  --sim-neutron: #a89f92;
+  --sim-cation: #e3a9a2;
+  --sim-anion: #a2c3e6;
+  --sim-force: #d6c088;
+  --sim-flame: #d99a6c;
+  --sim-wire: #a89f92;
+  --sim-series-1: #6090cc;
+  --sim-series-2: #b98b36;
+  --sim-series-3: #a8669a;
+  --sim-series-4: #6fa9ae;
+  --sim-series-5: #8f92c8;
+  --sim-series-6: #c97a6b;
+  --sim-series-7: #8fab72;
+  --sim-series-8: #6d737b;   /* the rest recedes under series 1-3, as in light */
+  --sim-series-1-ink: #6e9bd3;
+  --sim-series-2-ink: var(--sim-series-2);
+  --sim-series-3-ink: #c993bb;
+  --sim-series-4-ink: var(--sim-series-4);
+  --sim-series-5-ink: var(--sim-series-5);
+  --sim-series-6-ink: var(--sim-series-6);
+  --sim-series-7-ink: var(--sim-series-7);
+  --sim-series-8-ink: #9aa0a8;
+
+  --seg-done: var(--highlight);
+  --seg-track: #3a3630;
+  --seg-now: var(--signature);
+
+  /* The signature colour, lightened for the dark page (blue by default). */
+  --signature: #81aaf7;
+  --signature-ink: #81aaf7;
+  --signature-deep: #a3c2fa;
+  --signature-tint: #1d2d4c;
+}
+html[data-look="plain"][data-theme="dark"][data-accent="crimson"] { --signature: #f0889a; --signature-ink: #f0889a; --signature-deep: #f5a3b1; --signature-tint: #3b1d27; }
+html[data-look="plain"][data-theme="dark"][data-accent="teal"] { --signature: #62c6bb; --signature-ink: #62c6bb; --signature-deep: #86d6cd; --signature-tint: #12302f; }
+html[data-look="plain"][data-theme="dark"][data-accent="indigo"] { --signature: #a8abf4; --signature-ink: #a8abf4; --signature-deep: #c2c4f8; --signature-tint: #22244a; }
+html[data-look="plain"][data-theme="dark"][data-accent="ochre"] { --signature: #e8b25a; --signature-ink: #e8b25a; --signature-deep: #f0c67f; --signature-tint: #35290f; }
+html[data-look="plain"][data-theme="dark"][data-accent="green"] { --signature: #92d184; --signature-ink: #92d184; --signature-deep: #ade0a1; --signature-tint: #1a2f19; }
+html[data-look="plain"][data-theme="dark"][data-accent="blue"] { --signature: #81aaf7; --signature-ink: #81aaf7; --signature-deep: #a3c2fa; --signature-tint: #1d2d4c; }
+
+/* figure field, dark. The quiet casefile is the night page: paper, a hairline folder rule. */
+html[data-look="plain"][data-theme="dark"] {
+  --fig-desk: #15120f; --fig-ground: #15120f; --fig-card: #1b1814; --fig-edge: #3a3630; --fig-rule: #2c2823;
+  --fig-ink: #eae8df; --fig-muted: #a3a8ae; --fig-lead: #9cbbe0; --fig-lead-tint: #1e2a39;
+  --fig-ghost: #3a414c;
+  --fig-s1: #7fa8d8; --fig-s2: #d6a85c; --fig-s3: #c98bb5; --fig-s4: #6fb3b9; --fig-s5: #9a9ed6; --fig-grey: #8a9098;
+  --fig-shadow: transparent; --fig-tab: #15120f; --fig-ring: #2a3039; --fig-arrow: #9cbbe0; --fig-tab-ink: #ece8df;
+  --fig-case-desk: #15120f; --fig-case-ground: #15120f; --fig-case-card: #1b1814; --fig-case-edge: #3a3630; --fig-case-rule: #2c2823;
+  --fig-case-ink: #eae8df; --fig-case-muted: #a5a198; --fig-case-lead: #9cbbe0; --fig-case-lead-tint: #1e2a39;
+  --fig-case-sig: var(--signature-ink); --fig-case-sig-tint: var(--signature-tint); --fig-case-ghost: #57524a;
+  --fig-case-s1: #7fa8d8; --fig-case-s2: #d6a85c; --fig-case-s3: #c98bb5; --fig-case-s4: #6fb3b9; --fig-case-s5: #9a9ed6; --fig-case-grey: #8a9098;
+  --fig-case-shadow: transparent; --fig-case-tab: #15120f; --fig-case-ring: #2c2823; --fig-case-arrow: #eae8df; --fig-case-tab-ink: #eae8df;
+  --sim-set-desk: #15120f; --sim-set-folder: #15120f; --sim-set-folder-edge: #57524a; --sim-set-card: #15120f;
+  --sim-set-rule: #2c2823; --sim-set-paper: #1b1814; --sim-set-shade: transparent;
+}
+
+/* The reactor's one reaction: a small tick, light DOM, on <body>. It fades in
+   with a small rise and fades out where it stands. */
+.plain-tick {
+  position: fixed;
+  top: 76px;
+  right: var(--space-4);
+  z-index: 400;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border-color);
+  border-radius: 50%;
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-md);
+  color: var(--success-text);
+  pointer-events: none;
+  animation: plain-tick 1000ms cubic-bezier(0.2, 0, 0, 1) both;
+}
+.plain-tick svg { width: 16px; height: 16px; }
+@keyframes plain-tick {
+  0% { opacity: 0; transform: translateY(6px); }
+  18% { opacity: 1; transform: translateY(0); }
+  72% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .plain-tick { animation-name: plain-tick-still; }
+}
+@keyframes plain-tick-still {
+  0%, 72% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+/* Shared confirm/alert dialogs (src/ui/components/dialogs.js, light DOM):
+   flat buttons in the UI sans, a small radius, no lip and no press travel. */
+html[data-look="plain"] .aa-dialog-box::backdrop { background: var(--scrim); }
+html[data-look="plain"] .aa-dialog-box {
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+}
+html[data-look="plain"] .aa-dialog-title {
+  font-family: var(--font-heading);
+  font-weight: var(--heading-weight);
+}
+html[data-look="plain"] .aa-dialog-btn {
+  font-family: var(--font-ui);
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: normal;
+  padding: 9px 18px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-hover);
+  background: var(--bg-surface);
+  box-shadow: none;
+  transition: background var(--motion-fast), border-color var(--motion-fast);
+}
+html[data-look="plain"] .aa-dialog-btn:hover:not(:disabled) { background: var(--bg-panel); }
+html[data-look="plain"] .aa-dialog-btn:active:not(:disabled) { transform: none; }
+html[data-look="plain"] .aa-dialog-btn.primary {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: var(--on-primary);
+  box-shadow: none;
+}
+html[data-look="plain"] .aa-dialog-btn.primary:hover:not(:disabled) { background: var(--primary-hover); }
+html[data-look="plain"] .aa-dialog-btn:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+
+/* === figure + steps (plain) === */
+/* Series order (2026-11-05): 1 blue, 2 ochre, 3 teal, 4 plum. Plum as the third
+   default read as maroon beside the blue; teal is apart from blue in lightness
+   and from ochre in hue, so 1-3 still hold for red-green colour blindness. These
+   override the series blocks above (same selectors, later in the file); the
+   figure field (--fig-s*, --fig-case-s*) and the content graph palette follow
+   (content-series 3 teal, 5 plum). The figure renderer's own plain rules live in
+   FigureLayouts.js FIGURE_CSS (shadow DOM). */
+html[data-look="plain"] {
+  --sim-series-3: #3e7f86;
+  --sim-series-4: #934a7b;
+  --sim-series-3-ink: #2f666c;
+  --sim-series-4-ink: #934a7b;
+  --fig-s3: #3e7f86; --fig-s4: #934a7b;
+  --fig-case-s3: #3e7f86; --fig-case-s4: #934a7b;
+  --content-series-3: #3e7f86;
+  --content-series-5: #934a7b;
+}
+html[data-look="plain"][data-theme="dark"] {
+  --sim-series-3: #6fa9ae;
+  --sim-series-4: #a8669a;
+  --sim-series-3-ink: var(--sim-series-3);
+  --sim-series-4-ink: #c993bb;
+  --fig-s3: #6fb3b9; --fig-s4: #c98bb5;
+  --fig-case-s3: #6fb3b9; --fig-case-s4: #c98bb5;
+  --content-series-3: #6fa9ae;
+  --content-series-5: #a8669a;
+}
+/* === end figure + steps (plain) === */

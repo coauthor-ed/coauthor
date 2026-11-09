@@ -1,0 +1,13 @@
+{
+  "id": "showcase-guide-test",
+  "testId": "showcase-guide-test",
+  "type": "exam",
+  "title": { "en": "Practice test: Smells and slices" },
+  "subject": "science",
+  "grade": 9,
+  "durationMinutes": 10,
+  "questions": [
+    { "type": "fixed", "ref": "questions/guide-predict.json", "weight": 1 },
+    { "type": "fixed", "ref": "questions/maths-try.json", "weight": 1 }
+  ]
+}

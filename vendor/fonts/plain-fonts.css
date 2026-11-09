@@ -1,0 +1,79 @@
+/* The plain look's faces. Antic Didone (display serif: slide titles, step
+   numerals, big readings; one weight) over Instrument Sans (text and
+   interface; 400, 600, 700). Both SIL OFL 1.1 (see each folder's OFL.txt),
+   static TTF from the 2026-11-04 epidemiology prototype. Source Serif 4 and
+   Source Sans 3 stay declared: the kit's plain LookProfile still names
+   Source Sans 3 for scene text, and old content may name the serif. A face
+   is only downloaded when something on screen uses it.
+
+   Named by registry/looks.json, so LookManager links this file only once
+   plain is shown. latin-ext (the IAST diacritics in course text) falls back
+   to the next face in the stack for the two new faces. */
+@font-face {
+  font-family: 'Antic Didone'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('./antic-didone/antic-didone-regular.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Instrument Sans'; font-style: normal; font-weight: 400; font-display: swap;
+  src: url('./instrument-sans/instrument-sans-regular.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Instrument Sans'; font-style: normal; font-weight: 600; font-display: swap;
+  src: url('./instrument-sans/instrument-sans-semibold.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Instrument Sans'; font-style: normal; font-weight: 700; font-display: swap;
+  src: url('./instrument-sans/instrument-sans-bold.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Source Serif 4'; font-style: normal; font-weight: 200 600; font-display: swap;
+  src: url('./source-serif-4/source-serif-4-latin-wght-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Source Serif 4'; font-style: normal; font-weight: 200 600; font-display: swap;
+  src: url('./source-serif-4/source-serif-4-latin-ext-wght-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Source Sans 3'; font-style: normal; font-weight: 200 900; font-display: swap;
+  src: url('./source-sans-3/source-sans-3-latin-wght-normal.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Source Sans 3'; font-style: normal; font-weight: 200 900; font-display: swap;
+  src: url('./source-sans-3/source-sans-3-latin-ext-wght-normal.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Source Sans 3'; font-style: italic; font-weight: 200 900; font-display: swap;
+  src: url('./source-sans-3/source-sans-3-latin-wght-italic.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Source Sans 3'; font-style: italic; font-weight: 200 900; font-display: swap;
+  src: url('./source-sans-3/source-sans-3-latin-ext-wght-italic.woff2') format('woff2');
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+/* Superscripts (x10^-3, s^-1, Na^+): none of the faces above has U+2070,
+   U+2074-207E, so plain text drew empty boxes. Text in Instrument Sans falls
+   through to Source Sans 3 for them (it also takes the 1 2 3 superscripts
+   from there), headings in Antic Didone to Source Serif 4. Google Fonts
+   subsets of the same variable fonts (text=U+2070,2074-207E, SIL OFL 1.1,
+   2026-11-09). Source Serif 4 has no superscript + - =, so those three come
+   from the Source Sans 3 file. */
+@font-face {
+  font-family: 'Source Sans 3'; font-style: normal; font-weight: 200 900; font-display: swap;
+  src: url('./source-sans-3/source-sans-3-sups-wght-normal.woff2') format('woff2');
+  unicode-range: U+2070, U+2074-207E;
+}
+@font-face {
+  font-family: 'Source Serif 4'; font-style: normal; font-weight: 200 600; font-display: swap;
+  src: url('./source-serif-4/source-serif-4-sups-wght-normal.woff2') format('woff2');
+  unicode-range: U+2070, U+2074-2079, U+207D-207E;
+}
+@font-face {
+  font-family: 'Source Serif 4'; font-style: normal; font-weight: 200 600; font-display: swap;
+  src: url('./source-sans-3/source-sans-3-sups-wght-normal.woff2') format('woff2');
+  unicode-range: U+207A-207C;
+}

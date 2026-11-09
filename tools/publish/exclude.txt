@@ -1,0 +1,33 @@
+# Authoring-only files left out of a published series (stage-series.mjs).
+# One pattern per line: a bare name matches a file or folder at any depth; "*.ext" matches by suffix.
+_work
+source
+review
+steer
+image-prompts
+aigen
+old-artifacts
+audit-*
+*.prompt.txt
+*.tgz
+GENERATION-LOG.md
+OUTLINE.md
+OUTLINE.md.v1
+REVISED-OUTLINE.md
+REVISION-PLAN.md
+SIMULATION-REUSE-PLAN.md
+FIGURES.md
+DESIGN.md
+COURSE-BRIEF.md
+review-notes.json
+bundle.json
+build
+.DS_Store
+# Authoring working notes (owner decision 2026-11-09): scene design notes, scene briefs, helper notes, and the cells draft folder.
+*.design.md
+*.stub.md
+*.dropped-stub.md
+*.helper.md
+cells-module
+SoundArt.md
+AlgoKit.md

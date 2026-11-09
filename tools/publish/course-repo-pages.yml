@@ -1,0 +1,46 @@
+# Copy to <course-repo>/.github/workflows/pages.yml (stage-series.mjs does this).
+# Validates with the engine's own tools/validation (checked out into _engine/), because bundles may reference
+# engine-root-absolute files such as /src/simulations/biology/*.js that only exist in the engine repo.
+# The vendored tools/validation in this repo is a copy for local runs: node tools/validation/bundle-integrity.mjs <dir>
+name: pages
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: coauthor-ed/coauthor
+          path: _engine
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+      - name: Bundle integrity on every bundle
+        run: |
+          set -e
+          dirs=$(find . -mindepth 2 -maxdepth 3 -name manifest.json -not -path './_engine/*' -not -path './tools/*' -not -path './.github/*' -printf '%h\n' | sort)
+          node _engine/tools/validation/bundle-integrity.mjs $dirs
+          rm -rf _engine
+      - run: touch .nojekyll
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4

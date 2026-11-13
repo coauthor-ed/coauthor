@@ -1,12 +1,3 @@
----
-title: Costs, models and troubleshooting
-audience: author
-order: 70
-summary: What drives the cost of a course, which kind of model suits which stage, and what to do when a run goes wrong.
-icon: clock
-checkedAgainst:
-  kit: 2026-10-14
----
 
 ## What drives the cost
 

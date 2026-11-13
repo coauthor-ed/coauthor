@@ -33,7 +33,8 @@ const SANITIZE_CONFIG = {
     'code', 'pre', 'sub', 'sup', 'br', 'hr', 'span', 'div', 'mark', 'kbd', 'img',
   ],
   ALLOWED_ATTR: ['href', 'class', 'id', 'src', 'alt', 'title', 'data-try', 'data-callout', 'aria-hidden', 'colspan', 'rowspan', 'loading'],
-  ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|\/|\.\/|\.\.\/|media\/)/i,
+  // a bare guide slug (`slug` or `slug#heading`) has no colon, so it cannot carry a scheme; _decorate() rewrites it to a route
+  ALLOWED_URI_REGEXP: /^(?:https?:|mailto:|tel:|#|\/|\.\/|\.\.\/|media\/|[a-z0-9][a-z0-9-]*(?:#[\w-]*)?$)/i,
 };
 
 const CALLOUTS = { TIP: 'Tip', NOTE: 'Note', WARNING: 'Careful' };

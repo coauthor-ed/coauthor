@@ -34,7 +34,7 @@ Guessing first is not a test. Scientists work this way too. When your guess is w
 
 Wrong answers are fine here. In a lesson you lose no marks and no points. The question shows you why the answer was not right, and the lesson carries on so you can use the idea straight away.
 
-![A lesson question after a wrong guess. The chosen answer is marked Not this one, the right answer is marked, and a note explains why the guess was not right.](media/lesson-wrong-answer.png "A wrong guess in a lesson. You see the right answer and a short reason, and you lose nothing.")
+![A lesson question after a wrong guess. The chosen answer is marked Not this one, the right answer is marked, and a note explains why the guess was not right.](../media/lesson-wrong-answer.png "A wrong guess in a lesson. You see the right answer and a short reason, and you lose nothing.")
 
 Here is a small question to try. Choose an answer and press **Check**.
 
@@ -62,5 +62,5 @@ You earn XP for finishing lesson steps and for right answers. XP counts how much
 
 ## Next
 
-- [Typing maths](typing-maths) shows how to type fractions, powers and roots.
-- [Classic and story looks](classic-and-story-looks) shows the two ways to read a lesson.
+- [Typing maths](typing-maths.md) shows how to type fractions, powers and roots.
+- [Classic and story looks](classic-and-story-looks.md) shows the two ways to read a lesson.

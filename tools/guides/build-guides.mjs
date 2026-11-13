@@ -10,6 +10,7 @@
 // Node 20, no dependencies. Staleness (a guide checked against an older kit
 // version than content-repo-template/kit-version) is reported, never fatal.
 import { readFile, writeFile, mkdir, rm, readdir, stat, copyFile } from 'node:fs/promises';
+import { existsSync, mkdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,6 +18,18 @@ import {
   AUDIENCES, GUIDE_ICONS, parseFrontmatter, extractHeadings, extractTries, readingMinutes, extractLinks,
 } from '../../src/core/guides/guideMarkdown.js';
 import { validateBlock } from '../validation/block.js';
+
+// Guide sources use links that also work on GitHub: ../media/x.png, x.md,
+// ../<audience>/x.md, and full app URLs for routes or guides in another source.
+// The app reads media/x.png, x and #/route.
+const APP = 'https://coauthor-ed.github.io/coauthor/#/';
+function forApp(body) {
+  return body
+    .replaceAll('](../media/', '](media/')
+    .replaceAll('](' + APP + 'guides/', '](')
+    .replaceAll('](' + APP, '](#/')
+    .replace(/\]\((?:\.\.\/(?:students|parents|authors)\/)?([a-z0-9-]+)\.md(?=[#)\s])/g, '](\$1');
+}
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
@@ -53,12 +66,34 @@ const registry = {
   questions: Object.keys((await readJson(path.join(ROOT, 'registry', 'questions.json'))).questions || {}),
 };
 
-// Gather every guide from every source. Only local folders today; a git
-// source (`{ "git": url, "ref": tag, "path": "guides/" }`) is a later step.
+/** Shallow-fetch a git source's ref into guides/.cache/<name>/ and return its guides folder. */
+function fetchGitSource(src) {
+  const name = src.git.replace(/[^A-Za-z0-9]+/g, '_').slice(-60) + '__' + String(src.ref || 'HEAD').replace(/[^A-Za-z0-9.]+/g, '_');
+  const dir = path.join(ROOT, 'guides', '.cache', name);
+  const git = (args) => execFileSync('git', args, { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  try {
+    mkdirSync(dir, { recursive: true });
+    if (!existsSync(path.join(dir, '.git'))) git(['init', '-q']);
+    git(['fetch', '-q', '--depth', '1', src.git, src.ref || 'HEAD']);
+    git(['checkout', '-q', '--force', 'FETCH_HEAD']);
+  } catch (e) {
+    if (e.code === 'ENOENT') throw new Error('git is not installed (needed for git guide sources)');
+    throw new Error(`could not fetch ${src.git} @ ${src.ref || 'HEAD'} (network or ref problem): ${String(e.stderr || e.message).trim()}`);
+  }
+  return path.resolve(dir, src.path || 'guides/');
+}
+
+// Gather every guide from every source. A source is a local folder or a git
+// ref; it may hold any of students/, parents/, authors/ and media/. Guides from
+// all sources merge into one list (slugs must be unique across sources) and
+// media from every source is copied flat into guides/dist/media/.
 const guides = [];
 for (const src of config.sources || []) {
-  if (!src.local) { err(path.join(ROOT, 'guides', 'guides.config.json'), `source kind not supported yet: ${JSON.stringify(src)}`); continue; }
-  const base = path.resolve(ROOT, src.local);
+  let base;
+  if (src.local) base = path.resolve(ROOT, src.local);
+  else if (src.git) {
+    try { base = fetchGitSource(src); } catch (e) { err(path.join(ROOT, 'guides', 'guides.config.json'), e.message); continue; }
+  } else { err(path.join(ROOT, 'guides', 'guides.config.json'), `unknown source kind: ${JSON.stringify(src)}`); continue; }
   for (const [audience, dir] of Object.entries(AUDIENCE_DIR)) {
     const folder = path.join(base, dir);
     if (!(await exists(folder))) continue;
@@ -67,7 +102,7 @@ for (const src of config.sources || []) {
       const text = await readFile(file, 'utf8');
       const { meta, body, error } = parseFrontmatter(text);
       if (error) { err(file, error); continue; }
-      guides.push({ file, base, folderAudience: audience, slug: name.replace(/\.md$/, ''), meta, body });
+      guides.push({ file, base, folderAudience: audience, slug: name.replace(/\.md$/, ''), meta, body: forApp(body) });
     }
   }
 }
@@ -112,7 +147,7 @@ for (const g of guides) {
   for (const { image, href, text } of extractLinks(g.body)) {
     if (image) {
       if (!text) err(g.file, `image "${href}" needs alt text: ![what it shows](${href})`);
-      if (!href.startsWith('media/')) { err(g.file, `image "${href}" must live in guides/media/ (write media/<file>)`); continue; }
+      if (!href.startsWith('media/')) { err(g.file, `image "${href}" must live in guides/media/ (write ../media/<file>)`); continue; }
       if (!(await exists(path.join(g.base, href)))) err(g.file, `image not found: ${href}`);
       continue;
     }

@@ -23,12 +23,12 @@ Good signs that a source is safe:
 
 ## Adding it
 
-1. Open the **Parent area** (see [Profiles and the parent area](profiles-and-parental-gate)).
+1. Open the **Parent area** (see [Profiles and the parent area](profiles-and-parental-gate.md)).
 2. Go to **Settings**, then **Course sources**.
 3. Paste the source's address (its manifest URL) in the box and press **Add source**. The person who made the course will give you this.
 4. If a warning appears, read it, and add the source only if you trust it.
 
-![The Course sources window in the parent area. It says no courses from other websites have been added yet, and has a box for the manifest address and an Add source button.](media/course-sources.png "Paste the address in the box, then press Add source.")
+![The Course sources window in the parent area. It says no courses from other websites have been added yet, and has a box for the manifest address and an Add source button.](../media/course-sources.png "Paste the address in the box, then press Add source.")
 
 The new courses appear on the Discover page and on your child's home page.
 
@@ -42,4 +42,4 @@ Sometimes a lesson link brings in a single course bundle from somewhere else. Th
 
 ## Writing your own course
 
-You can write a course yourself and host it the same way. The [author guides](what-the-agent-kit-does) show how.
+You can write a course yourself and host it the same way. The [author guides](https://coauthor-ed.github.io/coauthor/#/guides/what-the-agent-kit-does) show how.

@@ -24,9 +24,9 @@ Your progress can be lost if:
 - you use a private or incognito window (it forgets everything when you close it);
 - the device is reset or replaced.
 
-To be safe, ask a grown-up to save a backup now and then. It takes a few seconds. They can see how in [Backing up and moving progress](backing-up-progress).
+To be safe, ask a grown-up to save a backup now and then. It takes a few seconds. They can see how in [Backing up and moving progress](../parents/backing-up-progress.md).
 
-![The Backup and restore window in the parent area, with an Export backup button and an Import backup button.](media/progress-backup.png "A grown-up makes a backup here, in the parent area.")
+![The Backup and restore window in the parent area, with an Export backup button and an Import backup button.](../media/progress-backup.png "A grown-up makes a backup here, in the parent area.")
 
 > [!TIP]
 > Always open CoAuthor in the same browser on the same device. A different browser on the same computer has its own, separate copy of the app.

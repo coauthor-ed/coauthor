@@ -32,7 +32,7 @@ After you submit, you see your score and a list of the questions. Open any quest
 - why the right answer is right;
 - for some questions, a worked explanation slide with a picture or a simulation.
 
-![The results of a practice test: a score of 50 percent, a Review what went wrong button, numbered question buttons, and the first question with the wrong answer and the right answer marked.](media/test-review.png "After a practice test. The red number is a question to look at again.")
+![The results of a practice test: a score of 50 percent, a Review what went wrong button, numbered question buttons, and the first question with the wrong answer and the right answer marked.](../media/test-review.png "After a practice test. The red number is a question to look at again.")
 
 Spend most of your time on the questions you got wrong. Read why, then try to explain the idea in your own words before you move on.
 
@@ -41,4 +41,4 @@ Spend most of your time on the questions you got wrong. Read why, then try to ex
 
 ## Next
 
-- [Your progress lives on this device](your-progress-on-this-device)
+- [Your progress lives on this device](your-progress-on-this-device.md)

@@ -15,7 +15,7 @@ The parent area shows how your child has been learning. This guide explains what
 
 A short summary of the last few days: time spent learning, lessons touched, recent test results, and a few **things to notice**. Read this first. It is written to start a conversation, not to judge.
 
-![The Overview tab of the parent area: one card for the child with lessons finished, stars, a 4 day streak and minutes spent, and a list of recent lessons and tests.](media/parent-overview.png "The Overview tab. The numbers here are example data.")
+![The Overview tab of the parent area: one card for the child with lessons finished, stars, a 4 day streak and minutes spent, and a list of recent lessons and tests.](../media/parent-overview.png "The Overview tab. The numbers here are example data.")
 
 ## Progress
 
@@ -23,7 +23,7 @@ A short summary of the last few days: time spent learning, lessons touched, rece
 - **Tests** - the latest results first, with the score for each finished test.
 - **XP each day** - a bar for each day. Every lesson step and test answer earns some XP.
 
-![The Progress tab: test results, a bar for the XP earned on each of the last seven days, and the lessons started and finished.](media/parent-progress.png "The Progress tab, with example data.")
+![The Progress tab: test results, a bar for the XP earned on each of the last seven days, and the lessons started and finished.](../media/parent-progress.png "The Progress tab, with example data.")
 
 > [!TIP]
 > XP measures practice, not understanding. A day with lots of XP and many wrong answers can be a very good day: your child was trying, guessing first, and learning from mistakes. That is how the lessons are meant to be used.

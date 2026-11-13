@@ -10,7 +10,7 @@ shots:
 
 Some questions ask you to type a maths answer, such as a fraction or an expression. They use a special maths box. It looks like a normal text box, but it turns what you type into proper maths as you go.
 
-![A maths question with its answer box and the small keyboard and menu buttons at its right end](media/typing-maths-box.png)
+![A maths question with its answer box and the small keyboard and menu buttons at its right end](../media/typing-maths-box.png)
 
 ## The four keys to remember
 
@@ -87,4 +87,4 @@ When you tap the maths box, a maths keyboard opens at the bottom of the screen. 
 
 ## Next
 
-- [Answering descriptive questions](answering-descriptive-questions) - long answers, and how they are marked.
+- [Answering descriptive questions](answering-descriptive-questions.md) - long answers, and how they are marked.

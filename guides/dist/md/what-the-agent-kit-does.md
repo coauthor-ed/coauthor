@@ -1,12 +1,3 @@
----
-title: What the agent kit does, and what it does not
-audience: author
-order: 10
-summary: Honest expectations before you start. The kit turns a textbook chapter into a CoAuthor course in small, checked steps, with you approving each one.
-icon: compass
-checkedAgainst:
-  kit: 2026-10-14
----
 
 The **agent kit** is a folder of instructions, checks and tools that lets an AI coding agent (Claude Code, Codex, opencode and similar) write a CoAuthor course from a textbook chapter. You run the kit; the agent does the writing; you review and approve.
 

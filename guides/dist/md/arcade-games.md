@@ -1,15 +1,3 @@
----
-title: Arcade games in a course
-audience: author
-order: 45
-summary: Short practice games made from a data file, not code. Six kinds of game, two looks each, and one deck can drive several of them.
-icon: gamepad
-checkedAgainst:
-  kit: 2026-10-14
-shots:
-  arcade-catch: /preview/courses/coauthor-showcase/blocks/arcade-catch.json?embed=1 1000x760 dark scale=1.5 wait=2500
-  arcade-judge: /preview/courses/coauthor-showcase/blocks/arcade-myths.json?embed=1 1000x760 light scale=1.5 wait=2500
----
 
 An arcade game is a short practice break inside a lesson: a minute or two of quick decisions about things the lesson has already taught. Every game follows the same rules: a wrong answer shows **why**, the same item comes back later, and the end card lists the learner's own mix-ups.
 

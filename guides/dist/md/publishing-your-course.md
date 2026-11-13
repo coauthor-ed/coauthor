@@ -1,12 +1,3 @@
----
-title: Publishing your course
-audience: author
-order: 60
-summary: Copy the approved course into a public repository, host it for free, and add it to CoAuthor as a course source.
-icon: fork
-checkedAgainst:
-  kit: 2026-10-14
----
 
 Your workspace holds everything: the chapter PDF, notes, logs and drafts. Publishing copies only what a learner needs into a **separate public folder**, which you then host on the web.
 

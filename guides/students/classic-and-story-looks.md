@@ -16,9 +16,9 @@ CoAuthor can show the same lesson in two looks. The questions, the simulations a
 - **Classic** - clean, simple slides on light or dark paper. Good for quick revision and for reading on a small screen.
 - **Story** - the lesson as a comic story, with ink outlines, paper textures and characters. Good when you want to settle in and read.
 
-![The diffusion slide in the classic look: clean text on the left, the simulation on the right, and Next and Previous buttons at the bottom.](media/look-classic.png "The classic look.")
+![The diffusion slide in the classic look: clean text on the left, the simulation on the right, and Next and Previous buttons at the bottom.](../media/look-classic.png "The classic look.")
 
-![The same slide in the story look: Quill explains the idea in a speech bubble, with ink outlines and paper colours.](media/look-story.png "The same slide in the story look. The words and the simulation have not changed.")
+![The same slide in the story look: Quill explains the idea in a speech bubble, with ink outlines and paper colours.](../media/look-story.png "The same slide in the story look. The words and the simulation have not changed.")
 
 ## How to switch
 
@@ -38,4 +38,4 @@ Some courses are written as one long story, with characters who come back from l
 
 ## Next
 
-- [Practice tests and reviewing your answers](practice-tests-and-review)
+- [Practice tests and reviewing your answers](practice-tests-and-review.md)

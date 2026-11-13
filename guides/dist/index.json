@@ -1,0 +1,726 @@
+{
+ "built": "2026-11-13",
+ "guides": [
+  {
+   "slug": "your-first-lesson",
+   "title": "Your first lesson",
+   "audience": "student",
+   "order": 10,
+   "summary": "How a lesson works - guess first, watch what happens, then explain it. Wrong guesses cost nothing.",
+   "icon": "compass",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "Guess first, then find out",
+     "id": "guess-first-then-find-out"
+    },
+    {
+     "depth": 2,
+     "text": "Moving through a slide",
+     "id": "moving-through-a-slide"
+    },
+    {
+     "depth": 2,
+     "text": "When you get an answer wrong",
+     "id": "when-you-get-an-answer-wrong"
+    },
+    {
+     "depth": 2,
+     "text": "Hints",
+     "id": "hints"
+    },
+    {
+     "depth": 2,
+     "text": "Stars and XP",
+     "id": "stars-and-xp"
+    },
+    {
+     "depth": 2,
+     "text": "Next",
+     "id": "next"
+    }
+   ],
+   "minutes": 2,
+   "tries": 1,
+   "updated": "2026-11-13"
+  },
+  {
+   "slug": "typing-maths",
+   "title": "Typing maths",
+   "audience": "student",
+   "order": 20,
+   "summary": "Fractions, powers, roots and symbols in the maths answer box, with live boxes to practise in.",
+   "icon": "math",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "The four keys to remember",
+     "id": "the-four-keys-to-remember"
+    },
+    {
+     "depth": 2,
+     "text": "Try it: a fraction",
+     "id": "try-it-a-fraction"
+    },
+    {
+     "depth": 2,
+     "text": "Try it: a power",
+     "id": "try-it-a-power"
+    },
+    {
+     "depth": 2,
+     "text": "Try it: a square root",
+     "id": "try-it-a-square-root"
+    },
+    {
+     "depth": 2,
+     "text": "Other symbols",
+     "id": "other-symbols"
+    },
+    {
+     "depth": 2,
+     "text": "On a phone or tablet",
+     "id": "on-a-phone-or-tablet"
+    },
+    {
+     "depth": 2,
+     "text": "When the answer is marked wrong",
+     "id": "when-the-answer-is-marked-wrong"
+    },
+    {
+     "depth": 2,
+     "text": "Next",
+     "id": "next"
+    }
+   ],
+   "minutes": 2,
+   "tries": 3,
+   "updated": "2026-11-13"
+  },
+  {
+   "slug": "answering-descriptive-questions",
+   "title": "Answering descriptive questions",
+   "audience": "student",
+   "order": 30,
+   "summary": "How long answers are checked point by point, how to get help step by step, and how to write answers that score full marks. With live questions to practise on.",
+   "icon": "pen",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "How your answer is checked",
+     "id": "how-your-answer-is-checked"
+    },
+    {
+     "depth": 2,
+     "text": "Try it: write, then grade",
+     "id": "try-it-write-then-grade"
+    },
+    {
+     "depth": 2,
+     "text": "Getting help, one step at a time",
+     "id": "getting-help-one-step-at-a-time"
+    },
+    {
+     "depth": 2,
+     "text": "Two kinds of descriptive question",
+     "id": "two-kinds-of-descriptive-question"
+    },
+    {
+     "depth": 2,
+     "text": "Try it: build an answer together",
+     "id": "try-it-build-an-answer-together"
+    },
+    {
+     "depth": 2,
+     "text": "Writing answers that score full marks",
+     "id": "writing-answers-that-score-full-marks"
+    },
+    {
+     "depth": 2,
+     "text": "Try it: one point in each box",
+     "id": "try-it-one-point-in-each-box"
+    },
+    {
+     "depth": 2,
+     "text": "Answers with steps or equations",
+     "id": "answers-with-steps-or-equations"
+    },
+    {
+     "depth": 2,
+     "text": "Next",
+     "id": "next"
+    }
+   ],
+   "minutes": 5,
+   "tries": 3,
+   "updated": "2026-11-13"
+  },
+  {
+   "slug": "classic-and-story-looks",
+   "title": "Classic and story looks",
+   "audience": "student",
+   "order": 40,
+   "summary": "Read a lesson as clean classic slides or as a comic story. How to switch, and why some courses are story only.",
+   "icon": "book",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "The two looks",
+     "id": "the-two-looks"
+    },
+    {
+     "depth": 2,
+     "text": "How to switch",
+     "id": "how-to-switch"
+    },
+    {
+     "depth": 2,
+     "text": "Story-only courses",
+     "id": "story-only-courses"
+    },
+    {
+     "depth": 2,
+     "text": "Next",
+     "id": "next"
+    }
+   ],
+   "minutes": 1,
+   "tries": 0,
+   "updated": "2026-11-13"
+  },
+  {
+   "slug": "practice-tests-and-review",
+   "title": "Practice tests and reviewing your answers",
+   "audience": "student",
+   "order": 50,
+   "summary": "How a practice test works, how to move between questions, and how to learn from your answers afterwards.",
+   "icon": "clipboard",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "Taking a test",
+     "id": "taking-a-test"
+    },
+    {
+     "depth": 2,
+     "text": "If you stop halfway",
+     "id": "if-you-stop-halfway"
+    },
+    {
+     "depth": 2,
+     "text": "Reviewing your answers",
+     "id": "reviewing-your-answers"
+    },
+    {
+     "depth": 2,
+     "text": "Next",
+     "id": "next"
+    }
+   ],
+   "minutes": 2,
+   "tries": 0,
+   "updated": "2026-11-13"
+  },
+  {
+   "slug": "your-progress-on-this-device",
+   "title": "Your progress lives on this device",
+   "audience": "student",
+   "order": 60,
+   "summary": "Where your progress is saved, why there is no account, and how to keep it safe.",
+   "icon": "shield",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "What this means for you",
+     "id": "what-this-means-for-you"
+    },
+    {
+     "depth": 2,
+     "text": "Keep it safe",
+     "id": "keep-it-safe"
+    },
+    {
+     "depth": 2,
+     "text": "Sharing a device",
+     "id": "sharing-a-device"
+    }
+   ],
+   "minutes": 1,
+   "tries": 0,
+   "updated": "2026-11-13"
+  },
+  {
+   "slug": "profiles-and-parental-gate",
+   "title": "Profiles and the parent area",
+   "audience": "parent",
+   "order": 10,
+   "summary": "The child's profile, the press-and-hold gate in front of the parent area, and what is inside it.",
+   "icon": "parent",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "The profile",
+     "id": "the-profile"
+    },
+    {
+     "depth": 2,
+     "text": "The parental gate",
+     "id": "the-parental-gate"
+    },
+    {
+     "depth": 2,
+     "text": "What is inside",
+     "id": "what-is-inside"
+    },
+    {
+     "depth": 2,
+     "text": "Next",
+     "id": "next"
+    }
+   ],
+   "minutes": 2,
+   "tries": 0,
+   "updated": "2026-11-13"
+  },
+  {
+   "slug": "adding-a-course-source",
+   "title": "Adding a course source",
+   "audience": "parent",
+   "order": 20,
+   "summary": "Load courses from another website or a teacher's repository, and what \"only add a source you trust\" really means.",
+   "icon": "globe",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "Before you add one",
+     "id": "before-you-add-one"
+    },
+    {
+     "depth": 2,
+     "text": "Adding it",
+     "id": "adding-it"
+    },
+    {
+     "depth": 2,
+     "text": "Removing it",
+     "id": "removing-it"
+    },
+    {
+     "depth": 2,
+     "text": "Bundles from a link",
+     "id": "bundles-from-a-link"
+    },
+    {
+     "depth": 2,
+     "text": "Writing your own course",
+     "id": "writing-your-own-course"
+    }
+   ],
+   "minutes": 2,
+   "tries": 0,
+   "updated": "2026-11-13"
+  },
+  {
+   "slug": "backing-up-progress",
+   "title": "Backing up and moving progress",
+   "audience": "parent",
+   "order": 30,
+   "summary": "Save a copy of every child's progress, restore it, and move it to a new device.",
+   "icon": "backup",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "When to make a backup",
+     "id": "when-to-make-a-backup"
+    },
+    {
+     "depth": 2,
+     "text": "Save a backup",
+     "id": "save-a-backup"
+    },
+    {
+     "depth": 2,
+     "text": "Restore a backup",
+     "id": "restore-a-backup"
+    },
+    {
+     "depth": 2,
+     "text": "Moving to a new device",
+     "id": "moving-to-a-new-device"
+    }
+   ],
+   "minutes": 2,
+   "tries": 0,
+   "updated": "2026-11-13"
+  },
+  {
+   "slug": "reading-the-parent-dashboard",
+   "title": "Reading the parent dashboard",
+   "audience": "parent",
+   "order": 40,
+   "summary": "What the numbers in the parent area mean, what they do not mean, and how to talk about them with your child.",
+   "icon": "chart",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "Overview",
+     "id": "overview"
+    },
+    {
+     "depth": 2,
+     "text": "Progress",
+     "id": "progress"
+    },
+    {
+     "depth": 2,
+     "text": "What the numbers do not tell you",
+     "id": "what-the-numbers-do-not-tell-you"
+    },
+    {
+     "depth": 2,
+     "text": "Practice tests",
+     "id": "practice-tests"
+    },
+    {
+     "depth": 2,
+     "text": "Talking about it",
+     "id": "talking-about-it"
+    }
+   ],
+   "minutes": 2,
+   "tries": 0,
+   "updated": "2026-11-13"
+  },
+  {
+   "slug": "what-the-agent-kit-does",
+   "title": "What the agent kit does, and what it does not",
+   "audience": "author",
+   "order": 10,
+   "summary": "Honest expectations before you start. The kit turns a textbook chapter into a CoAuthor course in small, checked steps, with you approving each one.",
+   "icon": "compass",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "What it does",
+     "id": "what-it-does"
+    },
+    {
+     "depth": 2,
+     "text": "What it does not do",
+     "id": "what-it-does-not-do"
+    },
+    {
+     "depth": 2,
+     "text": "The method in six steps",
+     "id": "the-method-in-six-steps"
+    },
+    {
+     "depth": 2,
+     "text": "Next",
+     "id": "next"
+    }
+   ],
+   "minutes": 2,
+   "tries": 0,
+   "updated": "2026-11-13",
+   "checkedAgainst": {
+    "kit": "2026-10-14"
+   },
+   "review": true
+  },
+  {
+   "slug": "setting-up-the-agent-kit",
+   "title": "Setting up the agent kit",
+   "audience": "author",
+   "order": 20,
+   "summary": "Make a workspace from the kit, choose an agent, add your first chapter, and check that everything is healthy.",
+   "icon": "sliders",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "What you need",
+     "id": "what-you-need"
+    },
+    {
+     "depth": 2,
+     "text": "1. Make a workspace",
+     "id": "1-make-a-workspace"
+    },
+    {
+     "depth": 2,
+     "text": "2. Check that everything is healthy",
+     "id": "2-check-that-everything-is-healthy"
+    },
+    {
+     "depth": 2,
+     "text": "3. Choose your agent",
+     "id": "3-choose-your-agent"
+    },
+    {
+     "depth": 2,
+     "text": "4. Paste the first prompt",
+     "id": "4-paste-the-first-prompt"
+    },
+    {
+     "depth": 2,
+     "text": "Next",
+     "id": "next"
+    }
+   ],
+   "minutes": 2,
+   "tries": 0,
+   "updated": "2026-11-13",
+   "checkedAgainst": {
+    "kit": "2026-10-14"
+   },
+   "review": true
+  },
+  {
+   "slug": "writing-a-course",
+   "title": "Writing a course",
+   "audience": "author",
+   "order": 30,
+   "summary": "The five stages at a glance, how next.mjs hands you one prompt at a time, and how to steer the agent while it works.",
+   "icon": "pen",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "The stages",
+     "id": "the-stages"
+    },
+    {
+     "depth": 2,
+     "text": "Getting the next prompt",
+     "id": "getting-the-next-prompt"
+    },
+    {
+     "depth": 2,
+     "text": "Running many at once",
+     "id": "running-many-at-once"
+    },
+    {
+     "depth": 2,
+     "text": "Steering while it works",
+     "id": "steering-while-it-works"
+    },
+    {
+     "depth": 2,
+     "text": "Simulations are the expensive part",
+     "id": "simulations-are-the-expensive-part"
+    },
+    {
+     "depth": 2,
+     "text": "When a run dies",
+     "id": "when-a-run-dies"
+    },
+    {
+     "depth": 2,
+     "text": "Next",
+     "id": "next"
+    }
+   ],
+   "minutes": 3,
+   "tries": 0,
+   "updated": "2026-11-13",
+   "checkedAgainst": {
+    "kit": "2026-10-14"
+   },
+   "review": true
+  },
+  {
+   "slug": "building-a-question-bank",
+   "title": "Building a question bank",
+   "audience": "author",
+   "order": 40,
+   "summary": "The three bank stages, how many questions a topic needs, and how a bank becomes practice tests for your child.",
+   "icon": "clipboard",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "The three stages",
+     "id": "the-three-stages"
+    },
+    {
+     "depth": 2,
+     "text": "How many questions",
+     "id": "how-many-questions"
+    },
+    {
+     "depth": 2,
+     "text": "Hard questions need worked answers",
+     "id": "hard-questions-need-worked-answers"
+    },
+    {
+     "depth": 2,
+     "text": "Descriptive questions",
+     "id": "descriptive-questions"
+    },
+    {
+     "depth": 2,
+     "text": "Next",
+     "id": "next"
+    }
+   ],
+   "minutes": 2,
+   "tries": 0,
+   "updated": "2026-11-13",
+   "checkedAgainst": {
+    "kit": "2026-10-14"
+   },
+   "review": true
+  },
+  {
+   "slug": "arcade-games",
+   "title": "Arcade games in a course",
+   "audience": "author",
+   "order": 45,
+   "summary": "Short practice games made from a data file, not code. Six kinds of game, two looks each, and one deck can drive several of them.",
+   "icon": "gamepad",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "The six kinds of game",
+     "id": "the-six-kinds-of-game"
+    },
+    {
+     "depth": 2,
+     "text": "Same deck, different games",
+     "id": "same-deck-different-games"
+    },
+    {
+     "depth": 2,
+     "text": "When a game is a good idea",
+     "id": "when-a-game-is-a-good-idea"
+    },
+    {
+     "depth": 2,
+     "text": "How the kit adds them",
+     "id": "how-the-kit-adds-them"
+    },
+    {
+     "depth": 2,
+     "text": "Next",
+     "id": "next"
+    }
+   ],
+   "minutes": 3,
+   "tries": 0,
+   "updated": "2026-11-13",
+   "checkedAgainst": {
+    "kit": "2026-10-14"
+   },
+   "review": true
+  },
+  {
+   "slug": "preview-review-approve",
+   "title": "Preview, review and approve",
+   "audience": "author",
+   "order": 50,
+   "summary": "See every lesson as your child will, take notes, approve what is ready, and turn notes into fix prompts.",
+   "icon": "check",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "Start the preview",
+     "id": "start-the-preview"
+    },
+    {
+     "depth": 2,
+     "text": "The review panel",
+     "id": "the-review-panel"
+    },
+    {
+     "depth": 2,
+     "text": "Turning notes into fixes",
+     "id": "turning-notes-into-fixes"
+    },
+    {
+     "depth": 2,
+     "text": "Approving",
+     "id": "approving"
+    },
+    {
+     "depth": 2,
+     "text": "A sensible order",
+     "id": "a-sensible-order"
+    }
+   ],
+   "minutes": 2,
+   "tries": 0,
+   "updated": "2026-11-13",
+   "checkedAgainst": {
+    "kit": "2026-10-14"
+   },
+   "review": true
+  },
+  {
+   "slug": "publishing-your-course",
+   "title": "Publishing your course",
+   "audience": "author",
+   "order": 60,
+   "summary": "Copy the approved course into a public repository, host it for free, and add it to CoAuthor as a course source.",
+   "icon": "fork",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "1. Make the public copy",
+     "id": "1-make-the-public-copy"
+    },
+    {
+     "depth": 2,
+     "text": "2. Push and host it",
+     "id": "2-push-and-host-it"
+    },
+    {
+     "depth": 2,
+     "text": "3. Add it to CoAuthor",
+     "id": "3-add-it-to-coauthor"
+    },
+    {
+     "depth": 2,
+     "text": "Updating",
+     "id": "updating"
+    }
+   ],
+   "minutes": 2,
+   "tries": 0,
+   "updated": "2026-11-13",
+   "checkedAgainst": {
+    "kit": "2026-10-14"
+   },
+   "review": true
+  },
+  {
+   "slug": "costs-models-and-troubleshooting",
+   "title": "Costs, models and troubleshooting",
+   "audience": "author",
+   "order": 70,
+   "summary": "What drives the cost of a course, which kind of model suits which stage, and what to do when a run goes wrong.",
+   "icon": "clock",
+   "headings": [
+    {
+     "depth": 2,
+     "text": "What drives the cost",
+     "id": "what-drives-the-cost"
+    },
+    {
+     "depth": 2,
+     "text": "Which model for which stage",
+     "id": "which-model-for-which-stage"
+    },
+    {
+     "depth": 2,
+     "text": "Troubleshooting",
+     "id": "troubleshooting"
+    }
+   ],
+   "minutes": 2,
+   "tries": 0,
+   "updated": "2026-11-13",
+   "checkedAgainst": {
+    "kit": "2026-10-14"
+   },
+   "review": true
+  }
+ ]
+}

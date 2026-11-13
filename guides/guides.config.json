@@ -1,6 +1,7 @@
 {
-  "_comment": "Where tools/guides/build-guides.mjs finds guides. Each source holds students/, parents/, authors/ and media/. Only local folders today; a git source ({ \"git\": url, \"ref\": tag, \"path\": \"guides/\" }) is planned (docs/sprints/completed/landing-page-and-guides.md).",
+  "_comment": "Where tools/guides/build-guides.mjs finds guides. The engine holds the student and parent guides (guides/); the author guides live in the public kit repo and are read from it at the pinned ref. Kinds: { \"local\": folder } or { \"git\": url, \"ref\": tag-or-commit, \"path\": \"guides/\" } (shallow-fetched into guides/.cache/, git-ignored).",
   "sources": [
-    { "local": "guides" }
+    { "local": "guides" },
+    { "git": "https://github.com/coauthor-ed/coauthor-kit.git", "ref": "5c4dafeaa5b11e04c19d660e5b768b4632e80bca", "path": "guides/" }
   ]
 }

@@ -1,12 +1,3 @@
----
-title: Preview, review and approve
-audience: author
-order: 50
-summary: See every lesson as your child will, take notes, approve what is ready, and turn notes into fix prompts.
-icon: check
-checkedAgainst:
-  kit: 2026-10-14
----
 
 Nothing reaches your child until you approve it. This guide shows the review loop: preview, note, fix, approve.
 

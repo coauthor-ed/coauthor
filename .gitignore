@@ -41,8 +41,6 @@ tools/ui-harness/shoot-parent.mjs
 content-repo-template/courses/work-energy
 content-repo-template/examples/work-energy/review-notes.json
 
-# Published guides (tools/guides/build-guides.mjs writes them; start_pyserver.sh and the deploy run it).
-guides/dist/
 
 # Landing page screenshot runs (tools/landing/shoot.mjs), ~180 MB per set
 tools/landing/out/

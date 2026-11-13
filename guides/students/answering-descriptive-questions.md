@@ -24,7 +24,7 @@ A board examiner marks a long answer as a list of points. A 3 mark answer usuall
    - **Almost** - you are close, but something is missing or unclear.
    - **Missing** - your answer does not make this point yet.
 
-![A graded answer. The checklist shows one point nailed and one point missing, with a Need a hand button next to the missing point.](media/descriptive-checklist.png "One point is there and one is missing. Press Need a hand? next to the missing one.")
+![A graded answer. The checklist shows one point nailed and one point missing, with a Need a hand button next to the missing point.](../media/descriptive-checklist.png "One point is there and one is missing. Press Need a hand? next to the missing one.")
 
 The checker reads for meaning, not for exact words. You do not need to copy the textbook. But a point must really be in your answer: a vague sentence that only hints at it is marked **Almost**.
 
@@ -203,4 +203,4 @@ If you write an equation that does not follow from the line above it, the checke
 
 ## Next
 
-- [Practice tests and reviewing your answers](practice-tests-and-review)
+- [Practice tests and reviewing your answers](practice-tests-and-review.md)

@@ -1,12 +1,3 @@
----
-title: Building a question bank
-audience: author
-order: 40
-summary: The three bank stages, how many questions a topic needs, and how a bank becomes practice tests for your child.
-icon: clipboard
-checkedAgainst:
-  kit: 2026-10-14
----
 
 A **question bank** is a pool of questions for one chapter, sorted by topic and difficulty. Parents build practice tests from it in the Parent area. A bank is a separate track from the lessons: you can build one with or without lessons for the same chapter.
 

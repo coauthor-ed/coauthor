@@ -1,12 +1,3 @@
----
-title: Writing a course
-audience: author
-order: 30
-summary: The five stages at a glance, how next.mjs hands you one prompt at a time, and how to steer the agent while it works.
-icon: pen
-checkedAgainst:
-  kit: 2026-10-14
----
 
 The kit splits a chapter into many small runs. Each run does one job, writes its result to files, and stops. The next run reads those files with a fresh memory. You do not need to remember where you are: the kit works it out from the files.
 

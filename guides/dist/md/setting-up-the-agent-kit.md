@@ -1,12 +1,3 @@
----
-title: Setting up the agent kit
-audience: author
-order: 20
-summary: Make a workspace from the kit, choose an agent, add your first chapter, and check that everything is healthy.
-icon: sliders
-checkedAgainst:
-  kit: 2026-10-14
----
 
 This guide takes you from nothing to the first prompt you paste into an agent. It takes about fifteen minutes.
 

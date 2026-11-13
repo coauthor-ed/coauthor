@@ -22,7 +22,7 @@ All progress lives only on the device, inside the browser. There is no cloud cop
 2. Under **Save a backup**, choose **Export backup**.
 3. One file downloads. It holds every child's progress on this device.
 
-![The Backup and restore window, in the dark theme: Save a backup with an Export backup button, and Restore a backup with an Import backup button.](media/backup-dialog.png "Export backup saves the file. Import backup restores one.")
+![The Backup and restore window, in the dark theme: Save a backup with an Export backup button, and Restore a backup with an Import backup button.](../media/backup-dialog.png "Export backup saves the file. Import backup restores one.")
 
 Keep the file somewhere other than the device itself: a USB stick, your email, or a cloud drive.
 

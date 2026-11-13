@@ -117,6 +117,21 @@ export class ProgressBar extends LitElement {
       opacity: 0.55;
     }
     @keyframes trail-spin { to { transform: rotate(360deg); } }
+
+    /* Offline marks (Q-100a): a slide whose files are not all on this device
+       yet is drawn as an outline only (dashed, hollow), so the solid ones
+       read as "here" and the dashed ones as "needs the internet". A done or
+       current segment keeps its fill; only its edge turns dashed. */
+    .seg.away {
+      border-style: dashed;
+      border-color: var(--seg-away, color-mix(in srgb, var(--text-muted) 70%, transparent));
+      background: transparent;
+    }
+    .tnode.away {
+      border-style: dashed;
+      border-color: var(--seg-away, color-mix(in srgb, var(--text-muted) 75%, transparent));
+    }
+    .tnode.away:not(.done):not(.now) { background: transparent; }
     @media (prefers-reduced-motion: reduce) {
       .fill, .seg-fill { transition: none; }
       .tnode.now::after { animation: none; }
@@ -144,7 +159,9 @@ export class ProgressBar extends LitElement {
     variant: { type: String },
     /** Blocks variant only: the current slide's revealed beat and beat count. */
     step: { type: Number },
-    steps: { type: Number }
+    steps: { type: Number },
+    /** Optional, one boolean per slide: false = not saved for offline yet (dashed mark). */
+    offline: { type: Array }
   };
 
   static MAX_SEGMENTS = 24;
@@ -160,13 +177,19 @@ export class ProgressBar extends LitElement {
     this.variant = 'bar';
     this.step = 0;
     this.steps = 1;
+    this.offline = null;
+  }
+
+  /** ' away' for a slide index known not to be saved for offline. */
+  _away(i) {
+    return Array.isArray(this.offline) && this.offline[i] === false ? ' away' : '';
   }
 
   _renderTrail(safeCurrent, safeTotal) {
     return html`
       <div class="trail" aria-hidden="true">
         ${Array.from({ length: safeTotal }, (_, i) => html`
-          <span class="tnode ${i < safeCurrent - 1 ? 'done' : i === safeCurrent - 1 ? 'now' : ''}"></span>
+          <span class="tnode ${i < safeCurrent - 1 ? 'done' : i === safeCurrent - 1 ? 'now' : ''}${this._away(i)}"></span>
           ${i < safeTotal - 1 ? html`<span class="tlink"></span>` : ''}
         `)}
       </div>
@@ -184,7 +207,7 @@ export class ProgressBar extends LitElement {
         ${Array.from({ length: safeTotal }, (_, i) => {
           // `current` is 1-based (LessonEngine._progressCurrent()).
           const state = i < safeCurrent - 1 ? 'done' : (i === safeCurrent - 1 ? 'current' : '');
-          return html`<div class="seg ${state}">
+          return html`<div class="seg ${state}${this._away(i)}">
             <div class="seg-fill" style=${state === 'current' ? `width: ${nowPct}%` : ''}></div>
             ${state === 'current' ? ticks.map((t) => html`<i class="tick" style=${`left: ${t}%`}></i>`) : ''}
           </div>`;
@@ -197,7 +220,8 @@ export class ProgressBar extends LitElement {
     const safeTotal = Math.max(1, Math.round(this.total));
     const safeCurrent = Math.max(0, Math.min(Math.round(this.current), safeTotal));
     const percentage = (safeCurrent / safeTotal) * 100;
-    const text = this.valueText || `${safeCurrent} out of ${safeTotal}`;
+    const away = Array.isArray(this.offline) ? this.offline.filter((v) => v === false).length : 0;
+    const text = (this.valueText || `${safeCurrent} out of ${safeTotal}`) + (away ? `; ${away} ${away === 1 ? 'slide needs' : 'slides need'} the internet` : '');
 
     return html`
       <div

@@ -1,3 +1,4 @@
+import '../../../../ui/components/MediaWait.js';
 import { LitElement, html, css } from 'lit';
 import { EventBus } from '../../../../core/EventBus.js';
 import { DomSimulation } from '../../../../simulations/base/DomSimulation.js';
@@ -280,6 +281,7 @@ export class MiniGamePlugin extends LookMixin(LitElement) {
       this._watchFit();
       this._playIntro();
     } catch (e) {
+      console.error('[mini-game@1] could not load the game', e);
       this._error = `Could not load this game: ${e.message}`;
     }
   }
@@ -490,7 +492,8 @@ export class MiniGamePlugin extends LookMixin(LitElement) {
   }
 
   render() {
-    if (this._error) return html`<div class="mg-card"><div class="mg-err">${this._error}</div></div>`;
+    // Q-100b: a game whose files did not arrive says so in the look, not as raw error text.
+    if (this._error) return html`<div class="mg-card"><media-wait kind="simulation" state="missing" style="border-radius: 16px;"></media-wait></div>`;
     const exercise = this._isExercise();
     const [cls, text] = this._verdict(exercise);
     return html`
@@ -501,6 +504,7 @@ export class MiniGamePlugin extends LookMixin(LitElement) {
         </div>
         <div class="mg-body">
           <div class="sim-host ${this._scene instanceof DomSimulation ? 'sim-host--fluid' : ''}" @click=${this._onBoardMove}></div>
+          ${this._ready ? '' : html`<media-wait kind="simulation" follow style="border-radius: 16px;"></media-wait>`}
           ${this._ready
             ? renderSimControls(this._SceneClass, this._scene, this._onControl, () => this.requestUpdate())
             : ''}

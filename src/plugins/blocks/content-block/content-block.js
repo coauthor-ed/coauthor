@@ -31,6 +31,7 @@ import { parseFocusCue, focusAt } from '../../../core/narration/narrationModel.j
 import { NarrationCover } from '../../../core/components/narrationCover.js';
 import { answerStageQueries } from '../../../core/components/stageAnswer.js';
 import { brandCopy } from '../../../ui/components/LookSlots.js';
+import '../../../ui/components/MediaWait.js';
 import { LookManager } from '../../../core/LookManager.js';
 import { parseSay } from '../../../core/cast/castData.js';
 import { LookMixin } from '../../../core/mixins/LookMixin.js';
@@ -1565,16 +1566,29 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
       if (typeof this._scene.start === 'function') this._scene.start();
       if (typeof this._scene.resume === 'function') this._scene.resume();
       if (this.narrated) this._narrFocusAt(this._narrFocusMs);
+      this._simLoad = 'ready';
+      this.requestUpdate();
     } catch (err) {
       console.error('Failed to load simulation', err);
-      // textContent, not innerHTML: the message is not ours to trust (invariant 6).
-      const msg = document.createElement('div');
-      msg.className = 'cb-sim-error';
-      msg.textContent = `Failed to load simulation: ${err.message}`;
-      host.replaceChildren(msg);
+      // Q-100b: no raw error text on the slide. <media-wait> says the
+      // simulation is not saved for offline yet (or did not load) and offers
+      // Try again; it also retries by itself when the device is back online.
+      host.replaceChildren();
+      this._simLoad = 'failed';
+      this.requestUpdate();
     } finally {
       this._sceneMounting = false;
     }
+  }
+
+  /** Try again after a failed scene load (Q-100b): forget the dead mount and load afresh. */
+  _retrySimulation() {
+    if (this._simLoad !== 'failed') return;
+    this._sceneHost = null;
+    this._probedSimSrc = null;
+    this._simSceneClass = null;
+    this._probeActiveSimulation();
+    this.requestUpdate();
   }
 
   /**
@@ -1662,6 +1676,8 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
     if (!src || src === this._probedSimSrc) return;
     this._probedSimSrc = src;
     this._simProbeDone = false;
+    // Q-100b: the stage shows the loader until the scene is set up.
+    this._simLoad = 'loading';
     SimulationLoader.loadModule(src, this._ctx?.bundleId).then((module) => {
       const SceneClass = SimulationLoader.resolveSceneClass(module);
       // The active simulation may have moved on again before this resolves
@@ -2934,11 +2950,24 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
         ${thHead && this._theatre.optsOpen ? this._theatre.renderOptions() : ''}
         <div class="sim-host-container ${frame === 'none' ? 'sim-host-container--frameless' : this._simSceneClass?.FRAME_STYLE === 'cabinet' ? 'sim-host-container--cabinet' : ''}">
           <div id="sim-canvas-host"></div>
+          ${this._simLoad === 'ready' ? '' : html`<media-wait class="cb-sim-wait" kind="simulation" retryable
+            state=${this._simLoad === 'failed' ? 'missing' : 'loading'}
+            style=${this._simWaitStyle()}
+            ?reload=${this._simLoad === 'failed' && SimulationLoader.needsReload(simulation?.src, this._ctx?.bundleId)}
+            @media-retry=${() => this._retrySimulation()}></media-wait>`}
         </div>
-        ${controlsHtml}
+        ${this._simLoad === 'ready' ? controlsHtml : ''}
         ${simulation.caption ? html`<p class="cb-stage-caption">${this._captionHtml(simulation.caption)}</p>` : ''}
       </div>
     `;
+  }
+
+  /** The waiting panel takes the scene's design shape when known, so the slide does not jump when it mounts. */
+  _simWaitStyle() {
+    const C = this._simSceneClass;
+    const w = Number(C?.WIDTH);
+    const h = Number(C?.HEIGHT);
+    return w > 0 && h > 0 ? `aspect-ratio: ${w} / ${h}; min-height: 0; max-height: 70vh;` : '';
   }
 
   /**
@@ -3148,7 +3177,12 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
         ${this._theatre.render({
           narration: html`${this._renderPoeRecap()}${this._renderSteps()}`,
           title: simulation.title?.en || simulation.title || '',
-          controls: this._renderSimControls(stageW != null && stageW < 400),
+          controls: this._simLoad === 'ready' ? this._renderSimControls(stageW != null && stageW < 400) : '',
+          // Q-100b: loader, then the not-saved card if the scene never arrives.
+          wait: this._simLoad === 'ready' ? '' : html`<media-wait kind="simulation" retryable
+            state=${this._simLoad === 'failed' ? 'missing' : 'loading'}
+            ?reload=${this._simLoad === 'failed' && SimulationLoader.needsReload(simulation?.src, this._ctx?.bundleId)}
+            @media-retry=${() => this._retrySimulation()}></media-wait>`,
           // A fit scene taller than its design frame narrows the box so its
           // foot is not cropped; a shorter one keeps the design frame.
           aspect: this._theatreAspect(dims),

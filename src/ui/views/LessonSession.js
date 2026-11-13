@@ -18,7 +18,8 @@ import { changePage, canChangePage } from '../pageChange.js';
 import { LessonModeMixin } from '../../core/mixins/LessonModeMixin.js';
 import { GamificationMixin } from '../../core/mixins/GamificationMixin.js';
 import { LookMixin } from '../../core/mixins/LookMixin.js';
-import { iconArrowLeft, iconArrowRight, iconStar, iconCheck, iconFlag } from '../icons/uiIcons.js';
+import { iconArrowLeft, iconArrowRight, iconStar, iconCheck, iconFlag, iconOfflineReady, iconCloudOff } from '../icons/uiIcons.js';
+import { OfflineAvailability } from '../../core/OfflineAvailability.js';
 import { splitSteps } from '../../core/markdown/splitSteps.js';
 import { tr } from '../../core/i18nProvider.js';
 import { iconBack as ICON_BACK, iconHome as ICON_HOME, iconPrev as ICON_PREV, iconNext as ICON_NEXT, iconAutoplay } from '../icons/navIcons.js';
@@ -304,7 +305,35 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
       font-weight: var(--fw-strong);
       font-size: 0.85rem;
       white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
     }
+    .lesson-head-meta:empty { display: none; }
+    /* Offline chip (Q-100a): teal when every slide is on this device; muted
+       while some are not (those slides are dashed in the progress bar). */
+    .off-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 10px 3px 7px;
+      border-radius: var(--radius-pill);
+      font-size: 0.78rem;
+      font-weight: var(--fw-heavy);
+      line-height: 1.3;
+      color: var(--text-muted);
+      background: var(--bg-panel);
+      border: 1.5px solid var(--border-color);
+    }
+    .off-chip svg { width: 16px; height: 16px; flex: none; }
+    .off-chip.ready {
+      color: var(--success-text);
+      background: var(--success-bg);
+      border-color: color-mix(in srgb, var(--accent-teal) 40%, transparent);
+    }
+    .off-chip.part { border-style: dashed; }
+    .off-chip.away { color: var(--text-main); border-style: dashed; }
+    :host([data-look="plain"]) .off-chip { border-radius: var(--radius-sm, 4px); font-weight: 600; }
 
     /* ── Bottom action bar (prototype A's .actionbar). Fixed rather than
        sticky so it is always one reach away, whatever the slide's height;
@@ -892,7 +921,10 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
     blockIndex: { type: Number },
     beatIndex: { type: Number },
     nodeId: { type: String },
-    blockRef: { type: String }
+    blockRef: { type: String },
+    // Offline marks (Q-100a, core/OfflineAvailability.js): this lesson's status, the device's connection.
+    _offStatus: { type: Object, state: true },
+    _online: { type: Boolean, state: true },
   };
 
   constructor() {
@@ -902,6 +934,10 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
     this._currentBlockIndex = 0;
     this._totalBlocks = 1;
     this._isComplete = false;
+    this._offStatus = null;
+    this._online = OfflineAvailability.online();
+    this._onAvail = ({ lessonId, status }) => { if (lessonId === this._offLessonId) this._offStatus = status; };
+    this._onNet = ({ online }) => { this._online = online; };
     this._error = null;
     this._nextLessonRef = null;
     this._nextLessonTitle = null;
@@ -1007,6 +1043,9 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
       this._slideDeck = (typeof deck === 'string' ? deck : deck?.en) || '';
     };
     EventBus.on('lesson:beat-changed', this._beatChangedListener);
+    EventBus.on('offline:availability', this._onAvail);
+    EventBus.on('offline:network', this._onNet);
+    this._online = OfflineAvailability.online();
     this._narrowMq?.addEventListener('change', this._onNarrow);
 
     // A plugin that knows its question is solved (math-workspace@1 when every
@@ -1050,6 +1089,11 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
     this._dialogAbort?.abort();
     EventBus.off('lesson:header-action', this._headerActionListener);
     EventBus.off('lesson:beat-changed', this._beatChangedListener);
+    EventBus.off('offline:availability', this._onAvail);
+    EventBus.off('offline:network', this._onNet);
+    this._unwatchOffline?.();
+    this._unwatchOffline = null;
+    this._offLessonId = null;
     this._narrowMq?.removeEventListener('change', this._onNarrow);
     EventBus.off('question:request-check', this._requestCheckListener);
     // Tells AppShell's merged bar to stop showing this lesson's controls
@@ -1455,6 +1499,7 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
 
       // 2. Initialize Engine
       const container = this.shadowRoot.getElementById('block-container');
+      this._watchOffline();
       this._engine = new LessonEngine(this.profileId, this.lessonId, container);
       this._engine.moduleId = this.moduleId || null;
       // This head shows each slide's title (plain hoists it out of the slide),
@@ -2130,6 +2175,36 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
    *  header, so the stage budget (--lesson-sticky-header-h) already counts
    *  it. On a phone the slide keeps its own title (content-block@1, same
    *  600px rule) and the head shows the lesson's. */
+  /** Keeps this lesson's offline status (per-slide marks, head chip) current. */
+  _watchOffline() {
+    if (this._offLessonId === this.lessonId) return;
+    this._unwatchOffline?.();
+    this._offLessonId = this.lessonId;
+    this._offStatus = OfflineAvailability.get(this.lessonId);
+    this._unwatchOffline = OfflineAvailability.watch([this.lessonId], { profileId: this.profileId });
+  }
+
+  /** Per-slide offline flags for the progress bar, only while some slide still needs the network. */
+  _offSlides() {
+    const st = this._offStatus;
+    if (!st || st.state === 'unknown' || st.state === 'ready' || !Array.isArray(st.slides)) return null;
+    return st.slides.length === this._totalBlocks ? st.slides : null;
+  }
+
+  /** The head's offline chip: saved, partly saved, or (offline) what is here. */
+  _renderOfflineChip() {
+    const st = this._offStatus;
+    if (!st || st.state === 'unknown' || st.state === 'none') return '';
+    if (st.state === 'ready') {
+      return html`<span class="off-chip ready" title="Every slide of this lesson is saved on this device">${iconOfflineReady}<span>Saved for offline</span></span>`;
+    }
+    if (!st.total) return '';
+    if (!this._online) {
+      return html`<span class="off-chip away" title="Dashed slides need the internet">${iconCloudOff}<span>Offline &middot; ${st.ready} of ${st.total} slides here</span></span>`;
+    }
+    return html`<span class="off-chip part" title="Dashed slides are not saved on this device yet">${iconOfflineReady}<span>${st.ready} of ${st.total} slides saved</span></span>`;
+  }
+
   _renderPlainHead(linear) {
     const n = this._lessonNumber || this._lessonNumberFromId();
     const short = (this._lessonTitle.split(/:\s/)[0] || this._lessonTitle).trim();
@@ -2350,6 +2425,7 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
           variant="${linear ? 'blocks' : 'bar'}"
           .current="${this._currentBlockIndex}"
           .total="${this._totalBlocks}"
+          .offline="${this._offSlides()}"
           .step="${this._stepState?.step ?? 0}"
           .steps="${this._stepState?.steps ?? 1}"
           .valueText="${this._progressText()}"
@@ -2507,10 +2583,10 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
             <h1>${this._lessonTitle}</h1>
           </div>
           ${linear && !this.isStoryMode ? html`
-            <div class="lesson-head-meta">${this.look === 'plain'
+            <div class="lesson-head-meta">${this._renderOfflineChip()}${this.look === 'plain'
               ? html`<span class="folio"><b>${this._currentBlockIndex}</b>of ${this._totalBlocks}</span>`
               : html`Slide ${this._currentBlockIndex} of ${this._totalBlocks}`}</div>
-          ` : ''}
+          ` : html`<div class="lesson-head-meta">${this._renderOfflineChip()}</div>`}
         </div>
       ` : ''}
       <header class="sticky-header full-header ${plainHead ? 'plain-sticky' : ''}">
@@ -2519,6 +2595,7 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
           variant="${!linear ? 'bar' : this.isStoryMode ? 'trail' : 'blocks'}"
           .current="${this._currentBlockIndex}"
           .total="${this._totalBlocks}"
+          .offline="${this._offSlides()}"
           .step="${this._stepState?.step ?? 0}"
           .steps="${this._stepState?.steps ?? 1}"
           .valueText="${this._progressText()}"
@@ -2536,6 +2613,7 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
           compact
           .current="${this._currentBlockIndex}"
           .total="${this._totalBlocks}"
+          .offline="${this._offSlides()}"
           .valueText="${this._progressText()}"
           label="Lesson Progress"
         ></progress-bar>

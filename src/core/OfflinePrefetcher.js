@@ -214,9 +214,12 @@ async function fetchOne(url, wantText, priority = undefined) {
   try {
     const res = await fetch(url, priority ? { priority } : undefined);
     if (!res.ok) { try { res.body?.cancel(); } catch { /* ignore */ } return FAILED; }
-    if (wantText) return await res.text();
-    await res.blob(); // read to the end so the worker's cached copy is complete
-    return null;
+    let out = null;
+    if (wantText) out = await res.text();
+    else await res.blob(); // read to the end so the worker's cached copy is complete
+    // OfflineAvailability re-checks its marks a moment after this.
+    EventBus.emit('offline:fetched', { url });
+    return out;
   } catch {
     return FAILED;
   }
@@ -262,6 +265,75 @@ function controlled(timeoutMs = 20000) {
 
 function isPreview() {
   return window.location.search.includes('preview=true') || window.location.hash.includes('preview=true');
+}
+
+// ---- module source, parsed once ----
+
+const parsedModules = new Map(); // module URL -> { deps, assets, math }
+
+/** A module's imports (resolved module URLs), its new URL(..., import.meta.url) assets, and whether it is a sign of math. */
+function parseModule(url, text) {
+  const specs = new Set();
+  for (const m of text.matchAll(STATIC_IMPORT_RE)) specs.add(m[1]);
+  for (const m of text.matchAll(DYNAMIC_IMPORT_RE)) specs.add(m[1]);
+  const deps = [];
+  let math = false;
+  for (const spec of specs) {
+    const dep = resolveSpecifier(spec, url);
+    if (!dep || !MODULE_RE.test(new URL(dep).pathname)) continue;
+    // A root-absolute spec outside the app (e.g. '/vendor/lit.js' written
+    // for a root deployment) would only 404 here, as it would at runtime.
+    if (spec.startsWith('/') && !dep.startsWith(APP_ROOT)) continue;
+    // MathRenderer (reached from every Markdown slide) always names
+    // MathLive, so that path alone is no sign of math; any other module
+    // that loads MathLive (an equation input) is. MathLive itself and
+    // its fonts are added in finish() only when the lesson has math.
+    if (dep === MATHLIVE_URL) {
+      if (url !== MATHLIVE_CONFIG_URL) math = true;
+      continue;
+    }
+    if (dep === MATHLIVE_CONFIG_URL && !LAZY_MATH_URLS.has(url)) math = true;
+    deps.push(dep);
+  }
+  const assets = [];
+  // Whole-line comments dropped first: a doc comment that shows the pattern
+  // (new URL('x.png', import.meta.url)) names no real file.
+  const code = text.replace(/^[ \t]*(?:\/\/|\/\*|\*).*$/gm, '');
+  for (const m of code.matchAll(META_URL_RE)) {
+    const asset = resolveSpecifier(m[1].startsWith('.') || m[1].startsWith('/') ? m[1] : `./${m[1]}`, url);
+    // new URL('./', import.meta.url) is a module's own folder (a base for later joins), not a file.
+    if (asset && !MODULE_RE.test(asset) && !new URL(asset).pathname.endsWith('/')) assets.push(asset);
+  }
+  return { deps, assets, math };
+}
+
+// ---- cache-only probing (OfflineAvailability) ----
+
+// Never in any cache by design (sw.js streams video), so never "missing".
+const NEVER_CACHED_RE = /\.(mp4|webm|m4v)$/i;
+// url -> Promise<string|true|null>: text for JSON/MD, true for any other
+// hit, null for a miss. Misses are dropped by forgetProbeMisses().
+const probes = new Map();
+const probeMisses = new Set();
+
+function probeUrl(url) {
+  const path = new URL(url).pathname;
+  if (NEVER_CACHED_RE.test(path)) return Promise.resolve(true);
+  let p = probes.get(url);
+  if (!p) {
+    p = (async () => {
+      let hit = null;
+      try { hit = await caches.match(url); } catch { hit = null; }
+      if (!hit) { probeMisses.add(url); return null; }
+      return /\.(json|md)$/i.test(path) ? hit.text().catch(() => null) : true;
+    })();
+    probes.set(url, p);
+  }
+  if (!MODULE_RE.test(path)) return p;
+  // A module not parsed yet hands its text over (read again, not kept);
+  // once parsed, presence is all a probe needs.
+  return p.then((r) => (r == null || parsedModules.has(url) ? r
+    : caches.match(url).then((h) => (h ? h.text() : null)).catch(() => null)));
 }
 
 // ---- one run: a lesson or a test ----
@@ -363,31 +435,17 @@ class Run {
     this.modules.add(url);
     const text = await this.w(url, PRIO_MODULE);
     if (!text) return;
-    const deps = new Set();
-    for (const m of text.matchAll(STATIC_IMPORT_RE)) deps.add(m[1]);
-    for (const m of text.matchAll(DYNAMIC_IMPORT_RE)) deps.add(m[1]);
-    for (const spec of deps) {
-      const dep = resolveSpecifier(spec, url);
-      if (!dep || !MODULE_RE.test(new URL(dep).pathname)) continue;
-      // A root-absolute spec outside the app (e.g. '/vendor/lit.js' written
-      // for a root deployment) would only 404 here, as it would at runtime.
-      if (spec.startsWith('/') && !dep.startsWith(APP_ROOT)) continue;
-      // MathRenderer (reached from every Markdown slide) always names
-      // MathLive, so that path alone is no sign of math; any other module
-      // that loads MathLive (an equation input) is. MathLive itself and
-      // its fonts are added in finish() only when the lesson has math.
-      if (dep === MATHLIVE_URL) {
-        if (url !== MATHLIVE_CONFIG_URL) this.math = true;
-        continue;
-      }
-      if (dep === MATHLIVE_CONFIG_URL && !LAZY_MATH_URLS.has(url)) this.math = true;
-      this.add(this.module(dep));
+    // Parsed once per session (a probe run passes true, not the text, for a
+    // module already parsed: OfflineAvailability re-checks often).
+    let info = parsedModules.get(url);
+    if (!info) {
+      if (typeof text !== 'string') return;
+      info = parseModule(url, text);
+      parsedModules.set(url, info);
     }
-    for (const m of text.matchAll(META_URL_RE)) {
-      const asset = resolveSpecifier(m[1].startsWith('.') || m[1].startsWith('/') ? m[1] : `./${m[1]}`, url);
-      // new URL('./', import.meta.url) is a module's own folder (a base for later joins), not a file.
-      if (asset && !MODULE_RE.test(asset) && !new URL(asset).pathname.endsWith('/')) this.add(this.w(asset, PRIO_MEDIA));
-    }
+    if (info.math) this.math = true;
+    for (const dep of info.deps) this.add(this.module(dep));
+    for (const asset of info.assets) this.add(this.w(asset, PRIO_MEDIA));
   }
 
   async plugins() {
@@ -427,8 +485,9 @@ class Run {
 // are about 0.9 MB of engine code that the service worker otherwise only
 // caches on the first lesson open: 20-30 s of a slow 3G first open.
 // Plugins by registry type, so a version move needs no edit here.
+export const LESSON_VIEW = 'src/ui/views/LessonSession.js';
 const ENGINE_MODULES = [
-  'src/ui/views/LessonSession.js',
+  LESSON_VIEW,
   'src/simulations/base/DomSimulation.js',
   'src/simulations/base/kit/SimScene.js',
 ];
@@ -645,6 +704,9 @@ export const OfflinePrefetcher = {
     return prefetch(`lesson:${d.lessonId}`, (run) => {
       if (d.narrationRef) run.walk(d.narrationRef, d.bundleId, 'narrationRef');
       seedEntries(run, d.entries);
+      // The lesson view's own import graph (mostly cached already), so the
+      // lesson counts as offline-ready (OfflineAvailability) once this ends.
+      run.add(run.module(appUrl(LESSON_VIEW)));
     }, getNarratePref(d.profileId, d.bundleId), d.lessonId).catch(() => {});
   },
 
@@ -744,6 +806,40 @@ export const OfflinePrefetcher = {
     } catch {
       return { ok: false, done: 0, total: 0, reason: 'error' };
     }
+  },
+
+  /**
+   * Cache-only check for OfflineAvailability: walks `entries` (and any
+   * `urls` / app `modules`) exactly as a prefetch run would, but reads only
+   * Cache Storage, never the network, so it costs no data. A file read once
+   * is remembered for the session (hits for good, misses until
+   * forgetProbeMisses()). Resolves { missing: string[], checked } and never
+   * throws; with no Cache API every file counts as missing.
+   * @param {{entries?:Array, urls?:string[], modules?:string[], narrationRef?:?string, bundleId?:?string, narrate?:boolean}} d
+   */
+  async probe({ entries = [], urls = [], modules = [], narrationRef = null, bundleId = null, narrate = false } = {}) {
+    const missing = new Set();
+    let checked = 0;
+    const fetcher = (url) => {
+      checked++;
+      if (typeof caches === 'undefined') { missing.add(url); return Promise.resolve(null); }
+      return probeUrl(url).then((r) => { if (r == null) missing.add(url); return r; });
+    };
+    try {
+      const run = new Run({ narrate: !!narrate, fetcher });
+      if (narrationRef) run.walk(narrationRef, bundleId, 'narrationRef');
+      seedEntries(run, entries);
+      for (const u of urls) { const abs = absolute(u); if (abs) run.add(run.w(abs, PRIO_JSON)); }
+      for (const m of modules) run.add(run.module(appUrl(m)));
+      await run.finish();
+    } catch { /* a partial answer is still an answer */ }
+    return { missing: [...missing], checked };
+  },
+
+  /** Something new may be cached: the next probe() looks up past misses again. */
+  forgetProbeMisses() {
+    for (const url of probeMisses) probes.delete(url);
+    probeMisses.clear();
   },
 
   /** @param {{testId:string, entries:Array}} d */

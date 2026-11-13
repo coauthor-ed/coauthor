@@ -3,6 +3,7 @@ import { SimulationLoader } from '../SimulationLoader.js';
 import { controlCurrent, optValue, optLabel, toControlValue } from '../../simulations/base/SimControls.js';
 import { answerStageQueries } from './stageAnswer.js';
 import { brandIcon } from '../../ui/components/LookSlots.js';
+import '../../ui/components/MediaWait.js';
 import { measureRestTop, restTopChanged, sideRestExtra } from './blockImageLayout.js';
 
 // scene -> stop answering cue:stage-query, for destroyQuestionSimulation().
@@ -422,10 +423,11 @@ export function renderSimCard({ canvasHostId, controlsTemplate, failed, errorMes
         ${icon ? html`<span style="font-size: 1.2rem;">${icon}</span>` : ''} ${heading}
       </h4>
       ${failed
-        ? html`<div style="padding: 12px; color: var(--error-text);">Couldn't load the companion simulation${errorMessage ? `: ${errorMessage}` : '.'}</div>`
+        ? html`<media-wait kind="simulation" state="missing" compact style="border-radius: 12px;"></media-wait>`
         : html`
           <div class="q-sim-host-container" style="touch-action: pan-y;">
             <div id="${canvasHostId}"></div>
+            <media-wait kind="simulation" follow compact style="border-radius: 12px;"></media-wait>
           </div>
           ${controlsTemplate}
         `}

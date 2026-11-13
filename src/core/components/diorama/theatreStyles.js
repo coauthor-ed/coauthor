@@ -304,6 +304,9 @@ export const theatreStyles = css`
   .th.cabinet .th-cam { border-radius: 0 0 14px 14px; background: var(--landing-sky-top); }
 
   .th-cam { position: relative; overflow: hidden; line-height: 0; }
+  /* Q-100b: the loader / not-saved card over the stage until the scene is set up. */
+  .th-wait { position: absolute; inset: 0; z-index: 2; display: grid; }
+  .th-wait > media-wait { height: 100%; min-height: 0; border-radius: 0; }
   .th-cam.panning { cursor: grabbing; }
   .th-cam.pan-mode { cursor: grab; }
   .th-cam-in { transform-origin: 0 0; width: 100%; height: 100%; }

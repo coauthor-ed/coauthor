@@ -81,6 +81,36 @@ function safeAsset(p, kinds) {
 const IMG = /\.(jpe?g|png|webp)$/i;
 const VID = /\.(mp4|webm)$/i;
 
+// Pixel size of a local image or clip, read from its header (JPEG SOF, PNG IHDR,
+// WebM PixelWidth/PixelHeight, MP4 tkhd). Null when unknown. Used to give each
+// "A look inside" tile its real aspect, so a portrait phone screencast is shown
+// as a phone-sized tile, not stretched to the page width (Q-100e).
+function mediaSize(file) {
+  let b;
+  try { const fd = fs.openSync(file, 'r'); b = Buffer.alloc(65536); const n = fs.readSync(fd, b, 0, b.length, 0); fs.closeSync(fd); b = b.subarray(0, n); } catch { return null; }
+  const ok = (w, h) => (w > 0 && h > 0 ? { w, h } : null);
+  if (b[0] === 0x89 && b.toString('latin1', 1, 4) === 'PNG') return ok(b.readUInt32BE(16), b.readUInt32BE(20));
+  if (b[0] === 0xff && b[1] === 0xd8) {
+    for (let i = 2; i + 9 < b.length;) {
+      if (b[i] !== 0xff) { i++; continue; }
+      const m = b[i + 1];
+      if (m >= 0xc0 && m <= 0xcf && m !== 0xc4 && m !== 0xc8 && m !== 0xcc) return ok(b.readUInt16BE(i + 7), b.readUInt16BE(i + 5));
+      i += 2 + b.readUInt16BE(i + 2);
+    }
+    return null;
+  }
+  if (b.readUInt32BE(0) === 0x1a45dfa3) { // EBML (WebM): first video track's PixelWidth (B0) / PixelHeight (BA)
+    const num = (id) => { const i = b.indexOf(Buffer.from([id])); for (let j = i; j >= 0 && j + 2 < b.length; j = b.indexOf(Buffer.from([id]), j + 1)) { const len = b[j + 1]; if (len >= 0x81 && len <= 0x84) { let v = 0; for (let k = 0; k < len - 0x80; k++) v = v * 256 + b[j + 2 + k]; if (v > 0 && v < 10000) return v; } } return 0; };
+    return ok(num(0xb0), num(0xba));
+  }
+  const tk = b.indexOf('tkhd'); // MP4: the first track header with a non-zero size
+  for (let i = tk; i > 0; i = b.indexOf('tkhd', i + 4)) {
+    const v1 = b[i + 4] === 1; const at = i + 4 + (v1 ? 88 : 76);
+    if (at + 8 <= b.length) { const r = ok(b.readUInt32BE(at) >>> 16, b.readUInt32BE(at + 4) >>> 16); if (r) return r; }
+  }
+  return null;
+}
+
 // ---------- data ----------
 const SUBJECT_NAMES = { science: 'Science', mathematics: 'Mathematics', maths: 'Mathematics', 'social-science': 'Social Science', sst: 'Social Science', epidemiology: 'Epidemiology' };
 
@@ -126,6 +156,12 @@ function loadFolder(dir) {
     if (!fs.existsSync(path.join(dir, full))) { console.warn(`  ! ${key}: ${full} not found, skipped`); return null; }
     return full;
   };
+  // The clip's own poster ({ src, poster } form), when it has one and it exists.
+  const castPoster = () => {
+    const { v: raw, base } = pick('screencast');
+    const p = raw && typeof raw === 'object' && !Array.isArray(raw) ? safeAsset(raw.poster, IMG) : null;
+    return p && fs.existsSync(path.join(dir, base + p)) ? base + p : null;
+  };
   const shotsField = pick('screenshots');
   const screenshots = (Array.isArray(shotsField.v) ? shotsField.v : []).map((p) => {
     const s = safeAsset(p && typeof p === 'object' ? p.src : p, IMG); // path or { src, caption }
@@ -156,6 +192,7 @@ function loadFolder(dir) {
     description: t(pick('description').v),
     highlights, screenshots,
     screencast: asset('screencast', VID),
+    screencastPoster: castPoster(),
     cover: asset('cover', IMG),
     license: typeof first.license === 'string' ? first.license : '',
     version: typeof first.version === 'string' ? first.version : '',
@@ -385,12 +422,15 @@ section.block{padding:40px 0}
 .mod details[open] summary::before{transform:rotate(45deg)}
 .mod ol{margin:8px 0 0;padding:0 0 0 22px;color:var(--ink-soft);font-size:.95rem}
 .mod ol li{padding:3px 0}
-.shots{display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 2px 14px;margin:0;list-style:none}
-.shots li{flex:0 0 86%;scroll-snap-align:start}
-@media (min-width:860px){.shots li{flex-basis:46%}}
-.shots img{width:100%;height:auto;aspect-ratio:16/9;object-fit:cover}
-.cast{margin-top:18px}
-.cast video{width:100%;height:auto}
+.shots{--tile-h:min(520px,calc(100vh - 220px));display:flex;gap:14px;overflow-x:auto;scroll-snap-type:x mandatory;padding:4px 2px 14px;margin:0;list-style:none}
+@supports (height:100svh){.shots{--tile-h:min(520px,calc(100svh - 220px))}}
+@media (min-width:860px){.shots{--tile-h:min(560px,calc(100vh - 200px))}@supports (height:100svh){.shots{--tile-h:min(560px,calc(100svh - 200px))}}}
+.shots li{flex:none;scroll-snap-align:start;height:max(320px,var(--tile-h));aspect-ratio:var(--ar,16/9);max-width:86vw;overflow:hidden;background:var(--surface)}
+.shots img,.shots video{width:100%;height:100%;object-fit:cover}
+.shots .cast video{object-fit:contain}
+.cast-wide{width:min(100%,880px);margin:0 auto 18px;overflow:hidden;background:var(--surface)}
+.cast-wide video{width:100%;height:auto;aspect-ratio:var(--ar,16/9)}
+.cast video:fullscreen{border:0;border-radius:0;background:transparent;object-fit:contain}
 .hl-list{display:grid;gap:12px;margin:0;padding:0;list-style:none}
 @media (min-width:700px){.hl-list{grid-template-columns:1fr 1fr}}
 @media (min-width:1000px){.hl-list{grid-template-columns:1fr 1fr 1fr}}
@@ -452,8 +492,7 @@ h2{font-size:clamp(1.5rem,4.6vw,2.1rem)}
 .mod .meta{margin:0;color:var(--ink-muted);font-size:.92rem;font-weight:700}
 .mod-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-top:auto}
 .mod ol li::marker{color:var(--mc);font-weight:800}
-.shots img{border-radius:16px;border:3px solid var(--rule)}
-.cast video{border-radius:16px;border:3px solid var(--rule)}
+.shots li,.cast-wide{border-radius:16px;border:3px solid var(--rule)}
 .hl-list li{background:var(--surface);border:2px solid var(--rule);border-radius:18px;box-shadow:0 4px 0 var(--rule);font-weight:700}
 .hl-list svg{color:var(--teal)}
 .steps li{background:var(--surface);border:2px solid var(--rule);border-radius:18px;box-shadow:0 4px 0 var(--rule)}
@@ -518,8 +557,7 @@ h3{font-family:var(--font-body);font-weight:600}
 .mod ol li::before{content:counter(l,decimal-leading-zero);font-family:var(--font-display);color:var(--brass-ink);font-size:1.2rem;line-height:1.3}
 .mod ol li:last-child{border-bottom:0}
 .mod-foot{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;margin-top:10px}
-.shots img{border-radius:8px;border:1px solid var(--rule)}
-.cast video{border-radius:8px;border:1px solid var(--rule)}
+.shots li,.cast-wide{border-radius:8px;border:1px solid var(--rule)}
 .hl-list li{border-top:2px solid var(--sig);padding:14px 0 0;background:none}
 .hl-list svg{color:var(--sig)}
 .steps li{border-top:1px solid var(--rule-strong);padding:14px 0 0}
@@ -589,10 +627,23 @@ ${lessons}
 <ul class="hl-list">${d.highlights.map((h) => `<li>${ICON_CHECK}<span>${esc(h)}</span></li>`).join('')}</ul>
 </div></section>` : '';
 
-  const shots = d.screenshots.length || d.screencast ? `<section class="block" aria-labelledby="sh-h"><div class="wrap">
+  // "A look inside": one rail of same-height tiles, each at its own aspect, the
+  // clip first. A phone screencast (portrait, the usual case) is one phone-sized
+  // tile; a landscape clip gets its own capped-width player above the rail.
+  // An unknown clip size is taken as a phone screencast (390x844).
+  const cs = d.castSize || { w: 390, h: 844 };
+  const castPortrait = cs.h >= cs.w;
+  const poster = d.screencastPoster || d.screenshots[0] || '';
+  const video = d.screencast ? `<video controls preload="none" playsinline${poster ? ` poster="${esc(poster)}"` : ''} width="${cs.w}" height="${cs.h}" aria-label="A short clip from ${esc(d.title)}"><source src="${esc(d.screencast)}" type="video/${d.screencast.toLowerCase().endsWith('.webm') ? 'webm' : 'mp4'}">Your browser cannot play this video.</video>` : '';
+  const ar = (z) => (z ? ` style="--ar:${z.w}/${z.h}"` : '');
+  const tiles = [
+    video && castPortrait ? `<li class="cast"${ar(cs)}>${video}</li>` : '',
+    ...d.screenshots.map((s, i) => { const z = d.shotSizes && d.shotSizes[i]; return `<li${ar(z)}><img src="${esc(s)}" alt="Screen ${i + 1} from ${esc(d.title)}" width="${z ? z.w : 1344}" height="${z ? z.h : 768}" loading="lazy" decoding="async"></li>`; }),
+  ].filter(Boolean);
+  const shots = tiles.length || video ? `<section class="block" aria-labelledby="sh-h"><div class="wrap">
 <div class="sec-head"><h2 id="sh-h">A look inside</h2></div>
-${d.screenshots.length ? `<ul class="shots">${d.screenshots.map((s, i) => `<li><img src="${esc(s)}" alt="Screen ${i + 1} from ${esc(d.title)}" width="1344" height="768" loading="lazy" decoding="async"></li>`).join('')}</ul>` : ''}
-${d.screencast ? `<div class="cast"><video controls preload="none" playsinline${d.screenshots[0] ? ` poster="${esc(d.screenshots[0])}"` : ''}><source src="${esc(d.screencast)}" type="video/${d.screencast.toLowerCase().endsWith('.webm') ? 'webm' : 'mp4'}">Your browser cannot play this video.</video></div>` : ''}
+${video && !castPortrait ? `<div class="cast cast-wide"${ar(cs)}>${video}</div>` : ''}
+${tiles.length ? `<ul class="shots">${tiles.join('')}</ul>` : ''}
 </div></section>` : '';
 
   const qr = qrSvg(base, { ecl: 'M', quiet: 2, dark: 'var(--qr-dark)', light: 'var(--qr-light)', title: `QR code for ${base}` });
@@ -767,6 +818,8 @@ for (const folder of opt.folders) {
   }
   console.log(`- ${folder}`);
   const d = loadFolder(dir);
+  d.castSize = d.screencast ? mediaSize(path.join(dir, d.screencast)) : null;
+  d.shotSizes = d.screenshots.map((p) => mediaSize(path.join(dir, p)));
   if (!d.cover && opt.coverJpg && !opt.dry) d.ogCover = 'cover.jpg';
   let html = render(folder, d);
   const out = path.join(dir, 'index.html');

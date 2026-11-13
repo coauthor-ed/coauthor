@@ -4,7 +4,7 @@
 // stale-while-revalidate and serves a cached copy immediately, catching up to
 // new JSON on the NEXT load. A returning student would otherwise run the old
 // engine against new content.
-const CACHE_NAME = 'coauthor-shell-v235';
+const CACHE_NAME = 'coauthor-shell-v236';
 // Bumped alongside CACHE_NAME here: catalog.json removal changed
 // HomeDashboard.js/TestDashboard.js's fetch behavior, but stale-while-
 // revalidate (see staleWhileRevalidate() below) serves whatever's already
@@ -60,6 +60,9 @@ const SHELL_ASSETS = [
   'vendor/marked.esm.js',
   'src/app.js',
   'src/ui/AppShell.js',
+  'src/ui/theme.css',
+  'src/ui/ProfileSwitcher.js',
+  'src/ui/UpdateToast.js',
   'src/ui/pageTurn.js',
   'src/ui/Router.js',
   'src/core/resolveTagName.js',
@@ -74,6 +77,9 @@ const SHELL_ASSETS = [
   'src/core/CourseSourceManager.js',
   'src/core/AssetPrefetcher.js',
   'src/core/OfflinePrefetcher.js',
+  'src/core/OfflineAvailability.js',
+  'src/core/lessonEntries.js',
+  'src/ui/components/MediaWait.js',
   'src/core/shareLinks.js',
   'src/core/InstallPrompt.js',
   'src/core/mathliveConfig.js',

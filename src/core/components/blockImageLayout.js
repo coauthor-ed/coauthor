@@ -5,6 +5,38 @@ import {
 } from '../focusRect.js';
 import { openImageLightbox } from '../../ui/components/imageLightbox.js';
 import { CourseSourceManager } from '../CourseSourceManager.js';
+import '../../ui/components/MediaWait.js';
+
+/* A slide picture's own loading and failed states (Q-100b). The wrap starts
+   with no data-img: <media-wait> shows the look's loader in the picture's
+   place. A load marks it data-img="ok" (the panel goes); a failure
+   data-img="fail" (the broken <img> is hidden and the panel says the picture
+   is not saved for offline yet, or did not load, with Try again). Set on the
+   element directly, never bound, so a re-render keeps it. */
+function imgWrapOf(el) {
+  return el?.closest?.('.cb-image-wrap') || null;
+}
+function onImgLoad(e) {
+  const w = imgWrapOf(e.currentTarget);
+  if (w) w.dataset.img = 'ok';
+}
+function onImgError(e) {
+  const w = imgWrapOf(e.currentTarget);
+  if (!w || w.dataset.img === 'ok') return;
+  w.dataset.img = 'fail';
+  const wait = w.querySelector(':scope > media-wait');
+  if (wait) wait.state = 'missing';
+}
+function onImgRetry(e) {
+  const wait = e.currentTarget;
+  const w = imgWrapOf(wait);
+  if (!w) return;
+  delete w.dataset.img;
+  wait.state = 'loading';
+  // Setting src again (same value) makes the browser fetch it again.
+  for (const img of w.querySelectorAll('img')) { const src = img.getAttribute('src'); img.setAttribute('src', src); }
+}
+const imgWait = () => html`<media-wait class="cb-img-wait" kind="picture" retryable @media-retry=${onImgRetry}></media-wait>`;
 
 /** Caption plus the visible attribution CC BY needs: "<caption> · Credit: <credit> (<license>)". Both parts optional. Plain text (Lit escapes it). */
 export function imageCaptionText(image) {
@@ -150,6 +182,17 @@ export const blockImageLayoutStyles = css`
     width: fit-content;
     max-width: 100%;
   }
+
+  /* Picture loading / failed (see imgWrapOf() above). */
+  .cb-img-wait { display: none; border-radius: 8px; }
+  .cb-image-wrap:not([data-img]) > .cb-img-wait,
+  .cb-image-wrap[data-img="fail"] > .cb-img-wait { display: grid; }
+  .cb-image-wrap:not([data-img]),
+  .cb-image-wrap[data-img="fail"] { min-width: min(320px, 100%); }
+  .cb-image-wrap[data-img="fail"] img,
+  .cb-image-wrap[data-img="fail"] .cb-image-viewport,
+  .cb-image-wrap[data-img="fail"] .cb-zoom-trigger { display: none; }
+  .cb-layout-background .cb-img-wait { position: absolute; inset: 0; border-radius: 0; }
 
   .cb-image-wrap img {
     width: 100%;
@@ -523,6 +566,8 @@ export function renderBlockImage(image, opts = {}) {
         alt="${image.alt || ''}"
         loading="lazy"
         decoding="async"
+        @load=${onImgLoad}
+        @error=${onImgError}
       >
       ${hasDark ? html`
       <img
@@ -531,7 +576,10 @@ export function renderBlockImage(image, opts = {}) {
         alt="${image.alt || ''}"
         loading="lazy"
         decoding="async"
+        @load=${onImgLoad}
+        @error=${onImgError}
       >` : ''}
+      ${imgWait()}
       ${zoomAffordance ? renderZoomTrigger(image, bundleId) : ''}
       ${imageCaptionText(image) ? html`<span class="cb-caption">${imageCaptionText(image)}</span>` : ''}
     </div>
@@ -1142,11 +1190,14 @@ export function renderBlockImageViewport(image, focus, opts = {}) {
             alt="${image.alt || ''}"
             loading="lazy"
             decoding="async"
+            @load=${onImgLoad}
+            @error=${onImgError}
           >
           <div class="cb-focus-mask" style="${camera ? 'display: none;' : focusMaskStyle(rect)}"></div>
         </div>
         ${camera ? '' : renderFocusCallout(rect, focus)}
       </div>
+      ${imgWait()}
       ${zoomAffordance ? renderZoomTrigger(image, bundleId) : ''}
       ${imageCaptionText(image) ? html`<span class="cb-caption">${imageCaptionText(image)}</span>` : ''}
     </div>

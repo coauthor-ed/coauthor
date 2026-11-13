@@ -13,7 +13,9 @@ import { GamificationMixin } from '../../core/mixins/GamificationMixin.js';
 import { LookMixin } from '../../core/mixins/LookMixin.js';
 import '../components/ModuleHeroCard.js';
 import { moduleLessonRefs, nextLessonIndex } from '../../core/lessonProgressRules.js';
-import { iconCheck, iconStar, iconArrowRight } from '../icons/uiIcons.js';
+import { iconCheck, iconStar, iconArrowRight, iconOfflineReady, iconCloudOff } from '../icons/uiIcons.js';
+import { EventBus } from '../../core/EventBus.js';
+import { OfflineAvailability } from '../../core/OfflineAvailability.js';
 
 /** A lesson entry's optional keyNumbers ([{ value, label: {en} }], at most
  *  three) as { value, label } strings; [] when absent or malformed. */
@@ -481,6 +483,59 @@ export class ModuleDashboard extends LookMixin(GamificationMixin(LessonModeMixin
       .node-coin { transition: none; }
     }
 
+    /* ── Offline marks (Q-100a). A lesson whose every file is on this device
+       wears a teal "Offline" tag; offline, a lesson that is not saved says it
+       needs the internet and steps back a little. Status comes from
+       core/OfflineAvailability.js; this view only shows it. */
+    .off-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 8px 1px 5px;
+      border-radius: var(--radius-pill);
+      font-size: 0.74rem;
+      font-weight: var(--fw-heavy);
+      line-height: 1.5;
+      white-space: nowrap;
+    }
+    .off-tag svg { width: 15px; height: 15px; flex: none; }
+    .off-tag.ready {
+      color: var(--success-text);
+      background: var(--success-bg);
+      box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--accent-teal) 35%, transparent);
+    }
+    .off-tag.part { color: var(--text-muted); background: var(--bg-panel); }
+    .off-tag.away { color: var(--text-muted); background: var(--bg-panel); }
+    .lesson-row.needs-net { opacity: 0.62; }
+    .lesson-row.needs-net:hover { opacity: 0.85; }
+    :host([data-look="plain"]) .off-tag { padding: 0; background: none; box-shadow: none; font-size: inherit; letter-spacing: inherit; }
+    :host([data-look="plain"]) .off-tag svg { width: 14px; height: 14px; }
+
+    /* Story: a teal seal on the coin, and the same tag on the card. */
+    .coin-seal {
+      position: absolute;
+      right: -6px;
+      bottom: -4px;
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: var(--bg-surface);
+      color: var(--success-text);
+      border: 2.5px solid var(--accent-teal);
+      box-shadow: var(--shadow-sm, var(--shadow-md));
+      z-index: 2;
+    }
+    .coin-seal svg { width: 18px; height: 18px; }
+    .coin-seal.away { color: var(--text-muted); border-color: var(--border-color); }
+    .map-node.needs-net .node-coin, .map-node.needs-net .node-card { opacity: 0.62; }
+    .node-card .off-tag { margin-top: 6px; }
+    @media (max-width: 640px) {
+      .coin-seal { width: 24px; height: 24px; right: -5px; bottom: -3px; }
+      .coin-seal svg { width: 15px; height: 15px; }
+    }
+
     .error-msg {
       color: var(--error-text);
       background: var(--error-bg);
@@ -497,6 +552,8 @@ export class ModuleDashboard extends LookMixin(GamificationMixin(LessonModeMixin
     _error: { type: String, state: true },
     _needsUpdate: { type: Boolean, state: true },
     _crumb: { type: Object, state: true },
+    _offline: { type: Object, state: true },
+    _online: { type: Boolean, state: true },
   };
 
   constructor() {
@@ -507,6 +564,66 @@ export class ModuleDashboard extends LookMixin(GamificationMixin(LessonModeMixin
     this._bundleId = null;
     this._progressMap = {};
     this._error = null;
+    this._offline = {};
+    this._online = OfflineAvailability.online();
+    this._onAvail = ({ lessonId, status }) => {
+      if (this._offlineIds?.has(lessonId)) this._offline = { ...this._offline, [lessonId]: status };
+    };
+    this._onNet = ({ online }) => { this._online = online; };
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    EventBus.on('offline:availability', this._onAvail);
+    EventBus.on('offline:network', this._onNet);
+    this._online = OfflineAvailability.online();
+    if (this._moduleData && !this._unwatch) this._watchOffline();
+  }
+
+  disconnectedCallback() {
+    EventBus.off('offline:availability', this._onAvail);
+    EventBus.off('offline:network', this._onNet);
+    this._unwatch?.();
+    this._unwatch = null;
+    super.disconnectedCallback();
+  }
+
+  /** Keeps every lesson's offline status current while this page shows (Q-100a). */
+  _watchOffline() {
+    this._unwatch?.();
+    const refs = moduleLessonRefs(this._moduleData, this._bundleId, CourseSourceManager.expandRef.bind(CourseSourceManager));
+    this._offlineIds = new Set(refs);
+    const known = {};
+    for (const r of refs) { const st = OfflineAvailability.get(r); if (st) known[r] = st; }
+    this._offline = known;
+    this._unwatch = OfflineAvailability.watch(refs, { profileId: this.profileId });
+  }
+
+  /** 'ready' | 'part' | 'away' | '' for one lesson ref: what its mark shows. */
+  _offlineKind(ref) {
+    const st = this._offline?.[ref];
+    if (!st || st.state === 'unknown') return '';
+    if (st.state === 'ready') return 'ready';
+    if (!this._online) return 'away';
+    return st.state === 'partial' && st.ready > 0 ? 'part' : '';
+  }
+
+  _offlineTag(ref) {
+    const kind = this._offlineKind(ref);
+    const st = this._offline?.[ref];
+    if (kind === 'ready') return html`<span class="off-tag ready">${iconOfflineReady}Offline</span>`;
+    if (kind === 'part') return html`<span class="off-tag part">${st.ready} of ${st.total} slides offline</span>`;
+    if (kind === 'away') return html`<span class="off-tag away">${iconCloudOff}${st?.ready ? `${st.ready} of ${st.total} slides here` : 'Needs internet'}</span>`;
+    return '';
+  }
+
+  _offlineLabel(ref) {
+    const kind = this._offlineKind(ref);
+    const st = this._offline?.[ref];
+    if (kind === 'ready') return ', available offline';
+    if (kind === 'part') return `, ${st.ready} of ${st.total} slides available offline`;
+    if (kind === 'away') return st?.ready ? `, only ${st.ready} of ${st.total} slides available offline` : ', needs the internet';
+    return '';
   }
 
   // AppShell reuses this element when one module's page follows another's
@@ -518,6 +635,8 @@ export class ModuleDashboard extends LookMixin(GamificationMixin(LessonModeMixin
 
   async _load() {
     const seq = (this._loadSeq = (this._loadSeq || 0) + 1);
+    this._unwatch?.();
+    this._unwatch = null;
     this._moduleData = null;
     this._progressMap = {};
     this._error = null;
@@ -533,6 +652,7 @@ export class ModuleDashboard extends LookMixin(GamificationMixin(LessonModeMixin
       if (await bundleNeedsNewerEngine(this._bundleId, moduleData)) { if (seq === this._loadSeq) this._needsUpdate = true; return; }
       if (seq !== this._loadSeq) return;
       this._moduleData = moduleData;
+      if (this.isConnected) this._watchOffline();
       // `"lessonMode": "story"` marks a story-only module: Story is forced
       // and the mode switch hidden while it is open (lesson-modes-plan.md).
       // `"look": "<id>"` (registry/looks.json) and `"gamification"` while the
@@ -666,11 +786,12 @@ export class ModuleDashboard extends LookMixin(GamificationMixin(LessonModeMixin
           const mis = plain && isNext ? l?.misconception?.en : '';
           const figs = mapped ? keyNumbers(l) : [];
           const desc = [q && `lq-${index}`, mis && `lm-${index}`, figs.length && `lf-${index}`].filter(Boolean).join(' ');
+          const offKind = this._offlineKind(refs[index]);
           return html`
             <li>
               <a href="${routeFor(index)}"
-                 class="lesson-row ${done ? 'done' : ''} ${isNext ? 'current' : ''}"
-                 aria-label="${titleFor(index)}, ${status}${stars ? `, ${stars} of 3 stars` : ''}"
+                 class="lesson-row ${done ? 'done' : ''} ${isNext ? 'current' : ''} ${offKind === 'away' ? 'needs-net' : ''}"
+                 aria-label="${titleFor(index)}, ${status}${stars ? `, ${stars} of 3 stars` : ''}${this._offlineLabel(refs[index])}"
                  aria-describedby=${desc || nothing}>
                 <span class="lesson-num" aria-hidden="true">${done ? iconCheck : plain ? String(index + 1).padStart(2, '0') : index + 1}</span>
                 <span class="row-text">
@@ -680,6 +801,7 @@ export class ModuleDashboard extends LookMixin(GamificationMixin(LessonModeMixin
                   <span class="row-sub">
                     <span>${status}</span>
                     ${stars && this.look !== 'plain' ? html`<span class="stars" aria-hidden="true">${[1, 2, 3].map((n) => iconStar(n <= stars))}</span>` : ''}
+                    ${offKind ? html`<span aria-hidden="true">${this._offlineTag(refs[index])}</span>` : ''}
                   </span>
                 </span>
                 ${mapped ? html`
@@ -725,19 +847,22 @@ export class ModuleDashboard extends LookMixin(GamificationMixin(LessonModeMixin
             const isNext = index === nextIndex;
             const stars = done && this.gamified ? (prog?.stars || 0) : 0;
             const sub = done ? 'Completed' : isNext ? (started ? 'Your quest continues here' : 'Your quest starts here') : started ? 'In progress' : 'Not visited yet';
+            const offKind = this._offlineKind(refs[index]);
             return html`
               <li>
-                <a href="${routeFor(index)}" class="map-node ${done ? 'done' : ''} ${isNext ? 'current' : ''}"
+                <a href="${routeFor(index)}" class="map-node ${done ? 'done' : ''} ${isNext ? 'current' : ''} ${offKind === 'away' ? 'needs-net' : ''}"
                    style="animation-delay: ${150 + index * 60}ms"
-                   aria-label="${titleFor(index)}, ${sub}${stars ? `, ${stars} of 3 stars` : ''}">
+                   aria-label="${titleFor(index)}, ${sub}${stars ? `, ${stars} of 3 stars` : ''}${this._offlineLabel(refs[index])}">
                   <span class="node-coin" aria-hidden="true">
                     ${done ? iconCheck : isNext && this.gamified ? iconStar(true) : index + 1}
                     ${isNext ? html`<companion-slot class="map-quill" size="sm" expression="happy" act="wave"></companion-slot>` : ''}
+                    ${offKind === 'ready' ? html`<span class="coin-seal">${iconOfflineReady}</span>` : offKind === 'away' ? html`<span class="coin-seal away">${iconCloudOff}</span>` : ''}
                   </span>
                   <span class="node-card">
                     <h3>${titleFor(index)}</h3>
                     <div class="sub">${sub}</div>
                     ${stars && this.look !== 'plain' ? html`<div class="stars" aria-hidden="true">${[1, 2, 3].map((n) => iconStar(n <= stars))}</div>` : ''}
+                    ${offKind ? html`<div aria-hidden="true">${this._offlineTag(refs[index])}</div>` : ''}
                     ${isNext ? html`<span class="cta">Step in</span>` : ''}
                   </span>
                 </a>

@@ -213,7 +213,15 @@ export class FeedbackOutbox extends LitElement {
     return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
   }
 
-  _item(it) {
+  /** Re-post one note through the same route the group's Send buttons use:
+   *  GitHub when the course has an issues page, else email, else copy. */
+  _repost(g, it) {
+    if (g.route.github) return this._run(() => this._sendGithub(g, [it]));
+    if (g.route.email) return this._run(() => this._email(g, [it]));
+    return this._run(() => this._copy(g, [it]));
+  }
+
+  _item(g, it) {
     const done = it.status !== 'draft';
     const via = { github: 'GitHub', email: tr('outbox.via_email', 'email'), copy: tr('outbox.via_copy', 'copied text') }[it.sentVia] || '';
     return html`
@@ -224,6 +232,7 @@ export class FeedbackOutbox extends LitElement {
         </div>
         <div class="i-actions">
           ${done ? '' : html`<button class="icon-act" title="${tr('outbox.dismiss', 'Dismiss')}" aria-label="${tr('outbox.dismiss', 'Dismiss')}" ?disabled="${this._busy}" @click="${() => this._dismiss(it)}">${iconClose}</button>`}
+          <button class="icon-act" title="${tr('outbox.repost', 'Post again')}" aria-label="${tr('outbox.repost', 'Post again')}" ?disabled="${this._busy}" @click="${() => this._repost(g, it)}">${iconSend}</button>
           <button class="icon-act danger" title="${tr('outbox.delete', 'Delete')}" aria-label="${tr('outbox.delete', 'Delete')}" ?disabled="${this._busy}" @click="${() => this._delete(it)}">${iconTrash}</button>
         </div>
         ${it.beatExcerpt ? html`<p class="excerpt">${it.beatExcerpt}${it.beatExcerpt.length >= Feedback.MAX_EXCERPT ? '...' : ''}</p>` : ''}
@@ -246,7 +255,7 @@ export class FeedbackOutbox extends LitElement {
           <h3>${g.title}</h3>
           <span class="g-count">${tr('outbox.waiting', '{n} waiting', { n: drafts.length })}</span>
         </div>
-        <ul class="items">${shown.map((it) => this._item(it))}</ul>
+        <ul class="items">${shown.map((it) => this._item(g, it))}</ul>
         ${drafts.length ? html`
           <div class="send">
             ${g.route.github ? html`<button class="btn-3d btn-primary btn-sm" ?disabled="${this._busy}" @click="${() => this._run(() => this._sendGithub(g, drafts))}">${iconSend} ${tr('outbox.send_github', 'Send on GitHub')}</button>` : ''}

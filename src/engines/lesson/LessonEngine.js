@@ -23,6 +23,8 @@ import { POEController } from './POEController.js';
 import { LessonModeManager } from '../../core/LessonModeManager.js';
 import { LookManager } from '../../core/LookManager.js';
 import { lessonStars } from '../../core/lessonProgressRules.js';
+import { linearEntry, flowEntry } from '../../core/lessonEntries.js';
+import '../../ui/components/MediaWait.js';
 
 const SAVE_DEBOUNCE_MS = 500;
 
@@ -151,7 +153,7 @@ export class LessonEngine {
       this.lessonData = await ContentLoader.loadJSON(finalPath);
     } catch (e) {
       ErrorReporter.reportError(e, { component: 'LessonEngine', lessonId: this.lessonId });
-      this.container.innerHTML = '<p role="alert">Lesson could not be loaded. Please try again.</p>';
+      this._showUnavailable('lesson');
       return;
     } finally {
       EventBus.emit('content:loading', { loading: false });
@@ -273,6 +275,8 @@ export class LessonEngine {
    *   a surprise.
    */
   async next(opts = {}) {
+    // A lesson whose file did not arrive shows its not-saved card; nothing to step.
+    if (!this.lessonData) return;
     if (!opts.auto) this.setAutoplay(false);
 
     // Re-entrancy. `next()` is async and `LessonSession._handleNext()` does not
@@ -306,6 +310,7 @@ export class LessonEngine {
   }
 
   async previous() {
+    if (!this.lessonData) return;
     this.setAutoplay(false);
     if (this._advancing) return;
     if (this._consumeStep('retreatStep')) return;
@@ -746,9 +751,15 @@ export class LessonEngine {
       // Telling a reviewer/parent "could not be loaded" reads as a bug to
       // go chase, when the accurate story is "this slide hasn't been
       // approved yet" — a very different, non-alarming next step.
-      this.container.innerHTML = loadError?.code === 'draft-content'
-        ? '<p role="status">This slide is still in draft and hasn\'t been published yet.</p>'
-        : '<p role="alert">Block could not be loaded.</p>';
+      if (loadError?.code === 'draft-content') {
+        this.container.innerHTML = '<p role="status">This slide is still in draft and hasn\'t been published yet.</p>';
+      } else {
+        this._showUnavailable('slide');
+      }
+      // The counter and progress bar still move to this slide, so the
+      // learner sees where they are and can step past it (Q-100b).
+      this._notifyProgress();
+      this._notifyPosition();
       return;
     }
 
@@ -825,6 +836,9 @@ export class LessonEngine {
       }
     } catch (e) {
       ErrorReporter.reportError(e, { component: 'LessonEngine', blockType: blockData.type });
+      // Its plugin's code did not arrive (offline, not cached yet): say so
+      // instead of leaving the slide blank (Q-100b).
+      if (!this.container.childElementCount) this._showUnavailable('slide');
     }
 
     // A new block may be one autoplay must not run on — a question, or
@@ -943,22 +957,34 @@ export class LessonEngine {
       .map((blockRef) => this._flowEntry(blockRef));
   }
 
+  /**
+   * A lesson or slide whose files did not arrive (Q-100b): the shared
+   * <media-wait> card ("not saved for offline yet" offline, "did not load"
+   * online) in place of blank space. A slide retries itself on Try again and
+   * when the device comes back online; a lesson asks to be opened again.
+   */
+  _showUnavailable(kind) {
+    const card = document.createElement('media-wait');
+    card.setAttribute('kind', kind);
+    card.setAttribute('state', 'missing');
+    card.style.cssText = 'border-radius: 16px; min-height: 260px;';
+    if (kind === 'slide') {
+      card.setAttribute('retryable', '');
+      card.addEventListener('media-retry', () => { if (card.isConnected) this._render(); });
+    }
+    this.container.replaceChildren(card);
+  }
+
   /** One linear-mode lessonData.blocks[] item as a prefetch entry. */
   _linearEntry(block) {
-    if (!block) return null;
-    if (block.blockRef) {
-      const refPath = CourseSourceManager.resolveRef(block.blockRef, this._bundleId);
-      return { ref: refPath.endsWith('.json') ? refPath : `${refPath}.json`, bundleId: this._bundleId };
-    }
-    return { data: block, bundleId: this._bundleId };
+    // Shared with OfflineAvailability (core/lessonEntries.js), so the
+    // offline marks and the prefetch agree on what a slide needs.
+    return linearEntry(block, this._bundleId);
   }
 
   /** One flow node's block ref as a prefetch entry (same resolution as _render()). */
   _flowEntry(blockRef) {
-    const path = blockRef.includes(':')
-      ? (() => { const basePath = blockRef.replace(':', '/'); return blockRef.startsWith('/') ? blockRef : `/content/${basePath}${basePath.endsWith('.json') ? '' : '.json'}`; })()
-      : (() => { const r = CourseSourceManager.resolveRef(blockRef, this._bundleId); return r.endsWith('.json') ? r : `${r}.json`; })();
-    return { ref: path, bundleId: this._bundleId };
+    return flowEntry(blockRef, this._bundleId);
   }
 
   async _complete() {

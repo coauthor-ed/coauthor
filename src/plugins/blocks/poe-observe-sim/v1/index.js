@@ -1,3 +1,4 @@
+import '../../../../ui/components/MediaWait.js';
 import { LitElement, html, css } from 'lit';
 import { EventBus } from '../../../../core/EventBus.js';
 import { SimulationLoader } from '../../../../core/SimulationLoader.js';
@@ -26,6 +27,7 @@ export class PoeObserveSimPlugin extends LitElement {
     _bundleId:          { type: String,  state: true },
     _unlocked:          { type: Boolean, state: true },
     _studentPrediction: { type: String,  state: true },
+    _simFailed:         { type: Boolean, state: true },
   };
 
   static styles = css`
@@ -272,7 +274,9 @@ export class PoeObserveSimPlugin extends LitElement {
       this.requestUpdate();
     } catch (err) {
       console.error('Failed to load simulation', err);
-      host.innerHTML = `<div style="padding: 20px; color: var(--error-text, #ff5f57);">Failed to load simulation: ${err.message}</div>`;
+      // Q-100b: <media-wait> below says why (offline / did not load).
+      host.replaceChildren();
+      this._simFailed = true;
     }
   }
 
@@ -337,6 +341,9 @@ export class PoeObserveSimPlugin extends LitElement {
         <!-- STABLE container — Lit never replaces this div's children -->
         <div class="sim-wrap">
           <div id="sim-canvas-host"></div>
+          ${this._simFailed
+            ? html`<media-wait kind="simulation" state="missing"></media-wait>`
+            : html`<media-wait kind="simulation" follow></media-wait>`}
         </div>
         ${this._renderControls()}
 

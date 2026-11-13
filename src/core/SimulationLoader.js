@@ -34,6 +34,7 @@ function warmCanvasGlyphs() {
 
 export const SimulationLoader = {
   _modules: new Map(), // resolved absolute URL -> Promise<module>
+  _failed: new Map(), // resolved URL -> failed import() count (see loadModule)
 
   /**
    * @param {string} src the block/question's own `simulation.src` (or
@@ -53,6 +54,19 @@ export const SimulationLoader = {
     // bundles reusing the same relative src (e.g. both "simulations/L01/
     // Scene.js") must never share a cache slot.
     if (!SimulationLoader._modules.has(resolvedPath)) {
+      // Offline, a scene whose files are not all in the offline cache is
+      // not imported at all (Q-100b): a failed import() poisons that URL and
+      // every file of its graph for the rest of the page, so trying would
+      // keep the scene broken even after the device is back online.
+      if (navigator.onLine === false && !SimulationLoader._isPreview()) {
+        const { OfflinePrefetcher } = await import('./OfflinePrefetcher.js');
+        const r = await OfflinePrefetcher.probe({ entries: [{ data: { simulation: { src } }, bundleId }] }).catch(() => null);
+        if (r?.missing?.length) {
+          const err = new Error(`[SimulationLoader] Not saved for offline: ${src}`);
+          err.code = 'offline-missing';
+          throw err;
+        }
+      }
       // In preview mode, force a genuinely fresh import every time (a
       // cache-busting query param — see ContentLoader.js's own identical
       // reasoning): an agent's just-fixed scene must load, not this
@@ -63,13 +77,34 @@ export const SimulationLoader = {
       // hasn't seen before is always a genuinely new module evaluation, so
       // this also sidesteps this Map's own reuse for the same reason.
       const isPreview = window.location.search.includes('preview=true') || window.location.hash.includes('preview=true');
-      const importPath = isPreview
-        ? `${resolvedPath}${resolvedPath.includes('?') ? '&' : '?'}_previewTs=${Date.now()}`
-        : resolvedPath;
+      // A browser remembers a failed import() of a URL for the life of the
+      // page and fails every later import() of it at once, even when the
+      // file is reachable again. So a retry after a failure (Q-100b: offline
+      // before the file was saved, then back online) imports the same file
+      // under a fresh query; the plain fetch first fills the offline cache
+      // under the file's own URL, the one OfflineAvailability checks.
+      // An earlier import() of the plain URL may have failed elsewhere (a
+      // warm-up while offline), so an online failure of the plain URL is
+      // retried once at once under a fresh query.
+      const sep = resolvedPath.includes('?') ? '&' : '?';
+      const attempt = (n) => {
+        if (isPreview) return import(/* webpackIgnore: true */ `${resolvedPath}${sep}_previewTs=${Date.now()}`);
+        if (!n) return import(/* webpackIgnore: true */ resolvedPath);
+        return fetch(resolvedPath).catch(() => null)
+          .then(() => import(/* webpackIgnore: true */ `${resolvedPath}${sep}_retry=${n}`));
+      };
+      const failed = SimulationLoader._failed.get(resolvedPath) || 0;
+      const p = attempt(failed).catch((err) => {
+        if (failed || isPreview || navigator.onLine === false) throw err;
+        SimulationLoader._failed.set(resolvedPath, 1);
+        return attempt(1);
+      });
       // A failed import (a network drop, offline before it was cached) is
       // forgotten, so the next attempt can load it once the file is there.
-      const p = import(/* webpackIgnore: true */ importPath);
-      p.catch(() => { if (SimulationLoader._modules.get(resolvedPath) === p) SimulationLoader._modules.delete(resolvedPath); });
+      p.catch(() => {
+        SimulationLoader._failed.set(resolvedPath, (SimulationLoader._failed.get(resolvedPath) || 0) + 1);
+        if (SimulationLoader._modules.get(resolvedPath) === p) SimulationLoader._modules.delete(resolvedPath);
+      });
       SimulationLoader._modules.set(resolvedPath, p);
     }
     return SimulationLoader._modules.get(resolvedPath);
@@ -84,6 +119,21 @@ export const SimulationLoader = {
    * @param {object} module the module returned by loadModule()
    * @returns {Function} the scene class
    */
+  /**
+   * True when this scene failed even after a fresh-query retry while online:
+   * a file of its import graph failed earlier in this page and the browser
+   * will not fetch it again, so only reloading the page can show it.
+   */
+  needsReload(src, bundleId) {
+    if (!src) return false;
+    const path = CourseSourceManager.resolveRef(src, bundleId);
+    return navigator.onLine !== false && (SimulationLoader._failed.get(path) || 0) >= 2;
+  },
+
+  _isPreview() {
+    return window.location.search.includes('preview=true') || window.location.hash.includes('preview=true');
+  },
+
   resolveSceneClass(module) {
     for (const value of Object.values(module)) {
       if (typeof value === 'function') return value;

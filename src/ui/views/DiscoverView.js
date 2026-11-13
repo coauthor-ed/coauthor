@@ -5,7 +5,7 @@ import { gradeLabel } from '../../core/gradeLabel.js';
 import { ProgressStore } from '../../core/ProgressStore.js';
 import { DEFAULT_SHOWCASE_SOURCES } from '../../config/defaultShowcaseSources.js';
 import { btn3dStyles } from '../sharedStyles.js';
-import { iconShare, iconChevronRight, iconArrowLeft, iconCheck, iconClock, iconDownload } from '../icons/uiIcons.js';
+import { iconShare, iconChevronRight, iconArrowLeft, iconCheck, iconClock, iconDownload, iconClose } from '../icons/uiIcons.js';
 import { showParentalGateHold } from '../components/GateHoldDialog.js';
 import { LookMixin } from '../../core/mixins/LookMixin.js';
 import { i18n } from '../../core/i18nProvider.js';
@@ -38,6 +38,7 @@ const LABEL_BADGES = {
 const SPEAKER = html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h3l4-3v10l-4-3H2z" fill="currentColor"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
 const BOOKMARK = html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h8v11l-4-2.6-4 2.6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
 const PLAY = html`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>`;
+const EXPAND = html`<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/></svg>`;
 
 /**
  * <discover-view> - the course shop, laid out like an app store (Q-47, D22,
@@ -469,6 +470,74 @@ export class DiscoverView extends LookMixin(LitElement) {
     }
     .play-dot svg { width: 30px; height: 30px; margin-left: 4px; }
     .play-label { font-family: var(--font-ui); font-weight: var(--fw-heavy); font-size: var(--fs-small); background: var(--bg-surface); color: var(--text-main); padding: 4px 12px; border-radius: var(--radius-pill); }
+
+    /* Q-100e: the clip in the rail is cropped to fill its tile (cover). In the
+       browser's own full screen it must show the whole frame, letterboxed. */
+    .shot video:fullscreen { object-fit: contain; background: var(--reveal-scrim-strong); border-radius: 0; }
+    .cast-expand {
+      position: absolute;
+      top: var(--space-2);
+      right: var(--space-2);
+      z-index: 1;
+      width: 40px;
+      height: 40px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      padding: 0;
+      border-radius: var(--radius-pill);
+      background: var(--reveal-scrim);
+      color: var(--reveal-on-scrim);
+      cursor: pointer;
+    }
+    .cast-expand:hover { background: var(--reveal-scrim-strong); }
+    .cast-expand svg { width: 20px; height: 20px; }
+
+    /* The bigger view: a modal over a dark scrim, the clip scaled to fit the
+       window with its own aspect (--ar, set from the video once known). */
+    dialog.cast-dlg {
+      --ar: 390 / 844;
+      width: 100vw;
+      height: 100dvh;
+      max-width: none;
+      max-height: none;
+      margin: 0;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      overflow: hidden;
+    }
+    dialog.cast-dlg[open] { display: flex; align-items: center; justify-content: center; }
+    dialog.cast-dlg::backdrop { background: var(--reveal-scrim-strong); }
+    .cast-dlg-frame {
+      aspect-ratio: var(--ar);
+      width: min(calc(100vw - 2 * var(--space-4)), calc((100dvh - 112px) * var(--ar)), 960px);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      background: var(--reveal-scrim-strong);
+      box-shadow: var(--shadow-md);
+    }
+    .cast-dlg-frame video { display: block; width: 100%; height: 100%; object-fit: contain; }
+    .cast-dlg-frame video:fullscreen { border-radius: 0; }
+    .cast-close {
+      position: absolute;
+      top: var(--space-3);
+      right: var(--space-3);
+      width: 44px;
+      height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 0;
+      padding: 0;
+      border-radius: var(--radius-pill);
+      background: var(--bg-surface);
+      color: var(--text-main);
+      box-shadow: var(--lip) var(--lip-color);
+      cursor: pointer;
+    }
+    .cast-close svg { width: 20px; height: 20px; }
 
     .lessons { list-style: none; margin: 0; padding: 0; counter-reset: les; display: grid; gap: 2px; max-width: 68ch; }
     .lessons li {
@@ -1021,6 +1090,7 @@ export class DiscoverView extends LookMixin(LitElement) {
           ${this._playing ? '' : html`<button class="play" @click=${(ev) => { const v = ev.currentTarget.parentElement.querySelector('video'); this._playing = true; v?.play?.().catch(() => {}); }}>
             <span class="play-dot">${PLAY}</span><span class="play-label">${t('discover.watch', 'Watch a clip')}</span>
           </button>`}
+          <button class="cast-expand" @click=${this._openCast} aria-label=${t('discover.clip_bigger', 'Watch the clip bigger')} title=${t('discover.clip_bigger', 'Watch the clip bigger')}>${EXPAND}</button>
         </figure></li>` : ''}
         ${s.screenshots.map((sh, i) => html`<li><figure class="shot">
           <img src=${sh.url} alt=${sh.caption || t('discover.shot_alt', 'Screenshot {n}', { n: i + 1 })} loading="lazy"
@@ -1028,7 +1098,31 @@ export class DiscoverView extends LookMixin(LitElement) {
           ${sh.caption ? html`<figcaption>${sh.caption}</figcaption>` : ''}
         </figure></li>`)}
       </ul>
+      ${s.screencast?.url ? html`<dialog class="cast-dlg" aria-label=${t('discover.clip', 'A short silent clip from the module')}
+          @click=${(ev) => { if (ev.target === ev.currentTarget) ev.currentTarget.close(); }}
+          @close=${(ev) => ev.currentTarget.querySelector('video')?.pause()}>
+        <div class="cast-dlg-frame">
+          <video src=${s.screencast.url} poster=${s.screencast.poster || s.screenshots[0]?.url || ''} muted playsinline loop controls preload="none"
+            @loadedmetadata=${(ev) => { const v = ev.currentTarget; if (v.videoWidth && v.videoHeight) v.closest('dialog').style.setProperty('--ar', `${v.videoWidth} / ${v.videoHeight}`); }}></video>
+        </div>
+        <button class="cast-close" @click=${(ev) => ev.currentTarget.closest('dialog').close()} aria-label=${t('discover.close', 'Close')}>${iconClose}</button>
+      </dialog>` : ''}
     </section>`;
+  }
+
+  /** Opens the clip in the bigger view (Q-100e): pauses the rail copy, plays the big one from the same point. */
+  _openCast(ev) {
+    const fig = ev.currentTarget.closest('figure');
+    const small = fig?.querySelector('video');
+    const dlg = this.renderRoot.querySelector('dialog.cast-dlg');
+    const big = dlg?.querySelector('video');
+    if (!dlg || !big) return;
+    const at = small && !small.paused ? small.currentTime : 0;
+    small?.pause?.();
+    if (small?.videoWidth && small?.videoHeight) dlg.style.setProperty('--ar', `${small.videoWidth} / ${small.videoHeight}`);
+    if (!dlg.open) dlg.showModal();
+    try { if (at) big.currentTime = at; } catch { /* not seekable yet */ }
+    big.play?.()?.catch?.(() => {});
   }
 
   _renderModule(e) {

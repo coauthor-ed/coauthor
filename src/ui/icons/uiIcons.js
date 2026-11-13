@@ -256,3 +256,8 @@ export const iconMail = uiSvg(svg`<rect x="3.5" y="5.5" width="17" height="13" r
 export const iconThemeDevice = uiSvg(svg`<circle cx="12" cy="12" r="8.5"></circle><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"></path>`, 20);
 export const iconShare = uiSvg(svg`<circle cx="18" cy="5.5" r="2.6"></circle><circle cx="6" cy="12" r="2.6"></circle><circle cx="18" cy="18.5" r="2.6"></circle><path d="M8.3 10.8l7.4-4.1M8.3 13.2l7.4 4.1"></path>`, 18);
 export const iconPhoneDown = uiSvg(svg`<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"></rect><path d="M12 7.5v7M9.2 11.8 12 14.6l2.8-2.8"></path>`, 18);
+
+/* Offline marks (Q-100): a lesson or slide saved on this device, and one that needs the internet. */
+const CLOUD = 'M7 18.5h10.2a4.3 4.3 0 0 0 .6-8.56A6 6 0 0 0 6.3 9.2 4.7 4.7 0 0 0 7 18.5z';
+export const iconOfflineReady = uiSvg(svg`<path d="${CLOUD}"></path><path d="M9.2 13.6l2 2 3.8-3.9"></path>`, 18);
+export const iconCloudOff = uiSvg(svg`<path d="M8.6 7.7a6 6 0 0 1 9.2 2.24A4.3 4.3 0 0 1 20.4 17"></path><path d="M17.2 18.5H7a4.7 4.7 0 0 1-1.6-9.1"></path><path d="M3.5 3.5l17 17"></path>`, 18);

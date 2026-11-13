@@ -239,7 +239,7 @@ export class StoryTheatre {
    *   numbered figure caption), or '' for none
    * @param {number} [o.maxSceneW]  widest the docked scene may render (px), 0 = no cap
    */
-  render({ narration, title, controls, aspect, step, steps, frameStyle, caption = '', maxSceneW = 0 }) {
+  render({ narration, title, controls, aspect, step, steps, frameStyle, caption = '', maxSceneW = 0, wait = '' }) {
     if (aspect > 0) this._aspect = aspect;
     this._maxSceneW = maxSceneW > 0 ? maxSceneW : Infinity;
     this._hasTitle = !!title;
@@ -302,6 +302,7 @@ export class StoryTheatre {
               <div class="th-cam"><div class="th-cam-in">
                 <div class="sim-host-container"><div id="sim-canvas-host"></div></div>
               </div></div>
+              ${wait ? html`<div class="th-wait">${wait}</div>` : ''}
               ${this._renderChip()}
             </div>
             ${controls ? html`

@@ -10,14 +10,21 @@ import { BRAND_DEFS, quillFull, brandPaint } from './components/brandSvg.js';
  * cheers, and hops away. dir 1 turns forwards (right to left); -1 turns
  * back, mirrored.
  *
- * How: a same-document View Transition. `update` runs inside it, so the old
- * page is a frozen snapshot (::view-transition-old(root)) laid over the live
- * new page. A clip-path on that snapshot removes the folded-back part, and
- * <quill-page-turn> (its own view-transition-name, so it paints above both)
- * draws the back of the page, the shadows and Quill. The clip is a WAAPI
- * animation on the pseudo-element; it keeps the transition alive for its
- * length and is the clock the overlay reads, so the drawing and the fold
- * cannot drift apart.
+ * How: a same-document View Transition. `update` runs inside it; the old
+ * page is a frozen snapshot (::view-transition-group(root)) laid over the
+ * new page, which is captured under its own name (quill-page-new) so the two
+ * can be moved separately. <quill-page-turn> (its own view-transition-name,
+ * so it paints above both) draws the back of the page, the shadows and Quill.
+ *
+ * Smooth on phones: nothing is redrawn per frame. Every pose is worked out
+ * up front and handed to the browser as WAAPI transform/opacity keyframes,
+ * which the compositor (GPU) plays even while the new page is still busy on
+ * the main thread. The fold is a straight crease, so "the old page minus the
+ * folded corner" is a half-plane: the snapshot sits in a big box rotated onto
+ * the crease with overflow: clip, and counter-rotated inside it so it stays
+ * put. The back of the page is a paper sheet mirrored across the crease in
+ * the same kind of box. Only Quill's wings, eyes and confetti are SVG
+ * animations (a small layer).
  *
  * Without View Transitions, with reduced motion, or while a turn is already
  * running, `update` just runs. canTurnPage() says which will happen.
@@ -90,17 +97,26 @@ export const canTurnPage = () =>
 
 // Page-level rules for the transition's pseudo-elements, scoped to our own
 // turns by the class on <html>. A constructed sheet, so no inline <style>.
+// --qpt-box / --qpt-w / --qpt-h are set on <html> by the overlay (prime()).
 let sheet = null;
 function ensureSheet() {
   if (sheet || typeof CSSStyleSheet === 'undefined') return;
   sheet = new CSSStyleSheet();
   sheet.replaceSync(`
-    :root.quill-turning::view-transition-group(root),
-    :root.quill-turning::view-transition-new(root),
-    :root.quill-turning::view-transition-old(root),
-    :root.quill-turning::view-transition-group(quill-page-turn),
-    :root.quill-turning::view-transition-new(quill-page-turn) { animation: none; }
-    :root.quill-turning::view-transition-old(root) { z-index: 1; }
+    :root.quill-turning-new { view-transition-name: quill-page-new; }
+    :root.quill-turning::view-transition-group(*),
+    :root.quill-turning::view-transition-image-pair(*),
+    :root.quill-turning::view-transition-old(*),
+    :root.quill-turning::view-transition-new(*) { animation: none; mix-blend-mode: normal; }
+    :root.quill-turning::view-transition-group(quill-page-new) { z-index: 0; }
+    :root.quill-turning::view-transition-group(root) {
+      z-index: 1; transform-origin: 0 0; overflow: clip;
+      width: var(--qpt-box); height: var(--qpt-box);
+    }
+    :root.quill-turning::view-transition-image-pair(root) {
+      transform-origin: 0 0; inset: auto; left: 0; top: 0; width: var(--qpt-w); height: var(--qpt-h);
+    }
+    :root.quill-turning::view-transition-group(quill-page-turn) { z-index: 2; }
     :root.quill-turning::view-transition-old(quill-page-turn) { display: none; }
   `);
   document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
@@ -117,9 +133,12 @@ export async function turnPage(update, { dir = 1, weight = 1 } = {}) {
   document.querySelectorAll('quill-page-turn').forEach((n) => n.remove());
   const root = document.documentElement;
   root.classList.add('quill-turning');
-  let overlay = null, clip = null;
+  let overlay = null, anims = [];
   const vt = document.startViewTransition(async () => {
     await update();
+    // The new page is captured under its own name, so the old one (root)
+    // can be clipped and moved on its own.
+    root.classList.add('quill-turning-new');
     overlay = document.createElement('quill-page-turn');
     overlay.turnDir = dir < 0 ? -1 : 1;
     overlay.speed = plan.speed;
@@ -133,17 +152,16 @@ export async function turnPage(update, { dir = 1, weight = 1 } = {}) {
   });
   try {
     await vt.ready;
-    overlay.run(clip = root.animate(
-      { clipPath: overlay.clipFrames() },
-      { duration: TURN_MS / plan.speed, easing: 'linear', fill: 'forwards', pseudoElement: '::view-transition-old(root)' },
-    ));
+    anims = overlay.run();
     await vt.finished;
   } catch {
     // Skipped (another transition, a hidden tab): the update still ran.
     overlay?.remove();
   } finally {
-    clip?.cancel();   // its pseudo-element is gone; don't leave it in getAnimations()
-    root.classList.remove('quill-turning');
+    // The pseudo-elements are gone; don't leave their animations in getAnimations().
+    anims.forEach((a) => a.cancel());
+    root.classList.remove('quill-turning', 'quill-turning-new');
+    for (const k of ['--qpt-box', '--qpt-w', '--qpt-h']) root.style.removeProperty(k);
     busy = false;
   }
   await vt.updateCallbackDone;   // surfaces an error thrown by `update`
@@ -159,49 +177,34 @@ const inOut = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
 const outBack = (t) => 1 + 2.2 * Math.pow(t - 1, 3) + 1.2 * Math.pow(t - 1, 2);
 const outQuad = (t) => 1 - (1 - t) * (1 - t);
 
-/** Clip a convex polygon to the half-plane (p - m) . n <= 0. */
-function clipHalf(poly, m, n, keepCorner = false) {
-  const side = (p) => ((p[0] - m[0]) * n[0] + (p[1] - m[1]) * n[1]) * (keepCorner ? -1 : 1);
-  const out = [];
-  for (let i = 0; i < poly.length; i++) {
-    const a = poly[i], b = poly[(i + 1) % poly.length];
-    const sa = side(a), sb = side(b);
-    if (sa <= 0) out.push(a);
-    if ((sa < 0 && sb > 0) || (sa > 0 && sb < 0)) {
-      const k = sa / (sa - sb);
-      out.push([a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k]);
-    }
-  }
-  return out;
-}
-const reflect = (p, m, n) => {
-  const d = 2 * ((p[0] - m[0]) * n[0] + (p[1] - m[1]) * n[1]);
-  return [p[0] - d * n[0], p[1] - d * n[1]];
-};
-const pts = (poly) => poly.map((p) => `${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(' ');
+const deg = (r) => r * 180 / Math.PI;
+const f1 = (v) => v.toFixed(1);
+const f3 = (v) => v.toFixed(3);
 
 export class QuillPageTurn extends LitElement {
   static styles = [brandPaint, css`
     :host {
       position: fixed; left: 0; top: 0; width: 100vw; height: 100vh; height: 100lvh;
-      z-index: 2147483000; pointer-events: none; contain: layout paint;
+      z-index: 2147483000; pointer-events: none; contain: strict; overflow: hidden;
     }
-    svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: hidden; }
-    .cast-a { stop-color: var(--page-turn-shadow); }
-    .cast-b { stop-color: var(--page-turn-shadow); stop-opacity: 0; }
-    .back-a { stop-color: var(--page-turn-paper-lo); }
-    .back-b { stop-color: var(--page-turn-paper); }
-    .gleam-a { stop-color: var(--page-turn-gleam); stop-opacity: 0; }
-    .gleam-b { stop-color: var(--page-turn-gleam); }
-    .gleam-c { stop-color: var(--page-turn-gleam); stop-opacity: 0; }
-    .drop { fill: var(--page-turn-shadow); opacity: 0.55; }
-    .rule { stroke: var(--page-turn-rule); }
-    .margin { stroke: var(--page-turn-margin); }
+    .clip, .cast, .sheet, .shade, .quill { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+    .clip { overflow: clip; }
+    .sheet { overflow: clip; }
+    .rules { position: absolute; inset: 0; }
+    .flap { background: var(--page-turn-paper); }
+    .drop-clip { opacity: 0.55; }
+    .drop { background: var(--page-turn-shadow); }
+    .cast { background: linear-gradient(to top, var(--page-turn-shadow), transparent); }
+    .back { background: linear-gradient(to bottom, var(--page-turn-paper-lo), var(--page-turn-paper) 45%); }
+    .gleam { background: linear-gradient(to bottom, transparent 4%, var(--page-turn-gleam) 14%, transparent 30%); }
+    .rules {
+      background:
+        linear-gradient(to right, transparent calc(100% - 65px), var(--page-turn-margin) calc(100% - 65px) calc(100% - 63px), transparent calc(100% - 63px)),
+        repeating-linear-gradient(to bottom, transparent 0 32.25px, var(--page-turn-rule) 32.25px 33.75px, transparent 33.75px 34px);
+    }
+    .quill { width: 0; height: 0; }
+    .quill svg { position: absolute; left: -320px; top: -496px; width: 640px; height: 720px; overflow: visible; }
     .joy { stroke: var(--quill-iris); opacity: 0; }
-    .shout .joy { opacity: 1; }
-    .shout .eye { opacity: 0; }
-    .shout .beak-open { opacity: 1; }
-    .shout .beak-shut { opacity: 0; }
     .bit { opacity: 0; }
     .f-shadow { display: none; }
     .wing-l { transform-origin: 82% 8%; }
@@ -213,7 +216,6 @@ export class QuillPageTurn extends LitElement {
     this.turnDir = 1;
     this.speed = 1;        // timeline ms per real ms
     this.withQuill = true;
-    this._anim = null;
   }
 
   /** Viewport size and Quill's size; called once the element is laid out. */
@@ -223,19 +225,22 @@ export class QuillPageTurn extends LitElement {
     this.H = Math.max(1, r.height);
     this.qH = Math.max(110, Math.min(210, Math.min(this.W, this.H) * 0.28));
     this.s = this.qH / 300;
+    // The clip boxes reach this far along and across the crease from its
+    // midpoint, which is always within reach of the screen.
+    this.L = Math.ceil(1.2 * (this.W + this.H));
+    this.D = Math.ceil(Math.hypot(this.W, this.H));   // half-width of the shading strips
+    this.sl = Math.min(this.W, this.H) * 0.14;          // cast shadow length
+    const root = document.documentElement.style;
+    root.setProperty('--qpt-box', `${2 * this.L}px`);
+    root.setProperty('--qpt-w', `${this.W}px`);
+    root.setProperty('--qpt-h', `${this.H}px`);
     const $ = (sel) => this.renderRoot.querySelector(sel);
-    this._el = {
-      svg: $('svg'), cast: $('.cast'), drop: $('.drop'), flap: $('.flap'),
-      quill: $('.quill'), body: $('.body'), wingL: $('.wing-l'), wingR: $('.wing-r'),
-      pupils: [...this.renderRoot.querySelectorAll('.pupil')], bits: [...this.renderRoot.querySelectorAll('.bit')],
-      castG: $('#pt-cast'), backG: $('#pt-back'), gleamG: $('#pt-gleam'), rules: $('#pt-rules'), flapClip: $('#pt-flap-clip polygon'),
-    };
-    this._el.quill.style.display = this.withQuill ? '' : 'none';
-    this._el.svg.setAttribute('viewBox', `0 0 ${this.W} ${this.H}`);
-    this._el.rules.setAttribute('width', String(this.W));
-    this._el.rules.querySelector('.margin').setAttribute('x1', String(this.W - 64));
-    this._el.rules.querySelector('.margin').setAttribute('x2', String(this.W - 64));
-    this._draw(0);
+    const size = (el, w, h) => { el.style.width = `${w}px`; el.style.height = `${h}px`; };
+    for (const el of this.renderRoot.querySelectorAll('.clip')) size(el, 2 * this.L, 2 * this.L);
+    for (const el of this.renderRoot.querySelectorAll('.sheet')) size(el, this.W, this.H);
+    for (const el of this.renderRoot.querySelectorAll('.shade')) size(el, 2 * this.D, 100);
+    size($('.cast'), 2 * this.D, this.sl);
+    $('.quill').style.display = this.withQuill ? '' : 'none';
   }
 
   /**
@@ -294,127 +299,165 @@ export class QuillPageTurn extends LitElement {
   /** Mirror x for a backwards turn. */
   _mx(p) { return this.turnDir > 0 ? p : [this.W - p[0], p[1]]; }
 
-  /** Old-page polygon (what stays visible) and the fold, in screen space. */
+  /** The crease for a corner position P: midpoint m, unit normal n (towards the corner), screen space. */
   _fold(P) {
-    const { W, H } = this;
-    const C = this._mx([W, H]);
+    const C = this._mx([this.W, this.H]);
     const Q = this._mx(P);
-    const m = [(C[0] + Q[0]) / 2, (C[1] + Q[1]) / 2];
-    const len = Math.hypot(C[0] - Q[0], C[1] - Q[1]);
+    const len = Math.max(1e-6, Math.hypot(C[0] - Q[0], C[1] - Q[1]));
     const n = [(C[0] - Q[0]) / len, (C[1] - Q[1]) / len];
-    const rect = [[0, 0], [W, 0], [W, H], [0, H]];
-    return { m, n, len, keep: clipHalf(rect, m, n), gone: clipHalf(rect, m, n, true) };
+    return { m: [(C[0] + Q[0]) / 2, (C[1] + Q[1]) / 2], n, len, C };
   }
 
-  /** clip-path keyframes for the old page, one per ~16 ms of real time. */
-  clipFrames() {
-    const steps = Math.ceil(TURN_MS / this.speed / 16);
-    const frames = [];
+  /**
+   * Timeline samples, one per ~16 ms of real time, each with its pose and
+   * crease. While the page still lies flat the crease sits just past the
+   * corner, facing the way it will first lift, so nothing shows.
+   */
+  _samples(total) {
+    const steps = Math.max(2, Math.ceil(total / this.speed / 16));
+    const out = [];
     for (let i = 0; i <= steps; i++) {
-      const { P } = this._pose((i / steps) * TURN_MS);
-      let poly = [[0, 0], [this.W, 0], [this.W, this.H], [0, this.H]];
-      if (P) poly = this._fold(P).keep;
-      if (!poly.length) poly = [[0, 0], [0, 0], [0, 0]];
-      while (poly.length < 6) poly.push(poly[poly.length - 1]);
-      frames.push(`polygon(${poly.map((p) => `${(p[0] / this.W * 100).toFixed(3)}% ${(p[1] / this.H * 100).toFixed(3)}%`).join(', ')})`);
+      const t = (i / steps) * total;
+      out.push({ t, pose: this._pose(t) });
     }
-    return frames;
+    let first = null;
+    for (let t = 0; t <= TURN_MS && !first; t += 4) { const { P } = this._pose(t); if (P) first = this._fold(P); }
+    let prev = null;
+    for (const smp of out) {
+      const f = smp.pose.P ? this._fold(smp.pose.P)
+        : { ...first, m: [first.C[0] + first.n[0] * 20, first.C[1] + first.n[1] * 20], len: 0 };
+      // Rotation that turns the box's +y axis onto -n (the kept side), unwrapped.
+      let phi = deg(Math.atan2(f.n[0], -f.n[1]));
+      if (prev !== null) phi += 360 * Math.round((prev - phi) / 360);
+      prev = phi;
+      smp.fold = { ...f, phi, flat: !smp.pose.P };
+    }
+    return out;
   }
 
-  run(anim) {
-    this._anim = anim;
-    this._t0 = performance.now();
-    const tick = () => {
-      if (!this.isConnected) return;
-      const a = this._anim;
-      const live = a && (a.playState === 'running' || a.playState === 'paused');
-      // Real ms to timeline ms: the poses are written for the full-speed show.
-      const t = this.speed * (live ? Number(a.currentTime) || 0 : Math.max(TURN_MS / this.speed, performance.now() - this._t0));
-      this._draw(t);
-      if (t >= (this.withQuill ? END_MS : TURN_MS)) { this.remove(); return; }
-      requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  }
+  /**
+   * Start the show: WAAPI keyframes for the old page's pseudo-elements and
+   * for the overlay. Returns the page animations (they keep the view
+   * transition alive); the overlay takes itself away when Quill is done.
+   *
+   * Geometry, with G = translate(m) rotate(phi) translate(-L, 0): a .clip box
+   * under G has the crease along its top edge and the kept side inside it.
+   * The snapshot (and the paper sheets) get G's inverse, so they stay where
+   * they were on screen; a sheet with scale(1, -1) in front of that inverse
+   * is the page mirrored across the crease, which is the back of the flap.
+   * Every transform is the same list of functions in every keyframe, so the
+   * browser interpolates them part by part and G and its inverse stay exact
+   * inverses between keyframes too.
+   */
+  run() {
+    const { L, D, sl } = this;
+    const total = this.withQuill ? END_MS : TURN_MS;
+    const page = this._samples(TURN_MS);
+    const all = this._samples(total);
+    const G = ({ m, phi }, dx = 0, dy = 0, tail = `translate(${-L}px, 0px)`) =>
+      `translate(${f1(m[0] + dx)}px, ${f1(m[1] + dy)}px) rotate(${f3(phi)}deg) ${tail}`;
+    const Ginv = ({ m, phi }, head = '') =>
+      `${head}translate(${L}px, 0px) rotate(${f3(-phi)}deg) translate(${f1(-m[0])}px, ${f1(-m[1])}px)`;
+    // Shading strips on the back of the flap, in the sheet's (mirrored) space:
+    // they run along the crease and reach depth into the flap.
+    const shade = (f) => G(f, 0, 0, `translate(${-D}px, 0px) scale(1, ${f3(-Math.max(40, f.len / 2) / 100)})`);
 
-  _draw(t) {
-    const E = this._el;
-    if (!E) return;
-    const pose = this._pose(t);
-    const set = (el, a) => { for (const k in a) el.setAttribute(k, a[k]); };
+    const rootEl = document.documentElement;
+    const pageOpts = { duration: TURN_MS / this.speed, easing: 'linear', fill: 'forwards' };
+    const pageAnims = [
+      rootEl.animate({ transform: page.map((p) => G(p.fold)) }, { ...pageOpts, pseudoElement: '::view-transition-group(root)' }),
+      rootEl.animate({ transform: page.map((p) => Ginv(p.fold)) }, { ...pageOpts, pseudoElement: '::view-transition-image-pair(root)' }),
+    ];
 
-    if (pose.P) {
-      const { m, n, len, gone } = this._fold(pose.P);
-      const flap = gone.map((p) => reflect(p, m, n));
-      const shadowLen = Math.min(this.W, this.H) * 0.14;
-      set(E.cast, { points: pts(gone) });
-      set(E.castG, { x1: m[0], y1: m[1], x2: m[0] + n[0] * shadowLen, y2: m[1] + n[1] * shadowLen });
-      set(E.flap, { points: pts(flap) });
-      set(E.flapClip, { points: pts(flap) });
-      set(E.drop, { points: pts(flap.map((p) => [p[0] + 5, p[1] + 9])) });
-      const depth = Math.max(40, len / 2);
-      set(E.backG, { x1: m[0], y1: m[1], x2: m[0] - n[0] * depth, y2: m[1] - n[1] * depth });
-      set(E.gleamG, { x1: m[0], y1: m[1], x2: m[0] - n[0] * depth, y2: m[1] - n[1] * depth });
-      // Ruled lines on the back sit where they were on the page, reflected.
-      const a = 1 - 2 * n[0] * n[0], b = -2 * n[0] * n[1], d = 1 - 2 * n[1] * n[1];
-      const k = 2 * (m[0] * n[0] + m[1] * n[1]);
-      set(E.rules, { patternTransform: `matrix(${a} ${b} ${b} ${d} ${k * n[0]} ${k * n[1]})` });
-    } else {
-      for (const el of [E.cast, E.flap, E.drop, E.flapClip]) el.setAttribute('points', '');
-    }
-
-    // Quill: feet at pose.feet, mirrored for a backwards turn.
-    const [fx, fy] = this._mx(pose.feet);
-    const sx = this.s * this.turnDir * (1 + pose.squash), sy = this.s * (1 - pose.squash);
-    E.quill.setAttribute('transform', `translate(${fx.toFixed(1)} ${fy.toFixed(1)}) scale(${sx.toFixed(4)} ${sy.toFixed(4)}) translate(${-FEET[0]} ${-FEET[1]})`);
-    E.wingL.style.transform = `rotate(${pose.wingL}deg)`;
-    E.wingR.style.transform = `rotate(${pose.wingR}deg)`;
-    E.body.classList.toggle('shout', pose.shout || (t > 560 && t < 760));
-    const look = pose.holding ? [5, -5] : pose.shout ? [0, 0] : [-6, 2];
-    E.pupils.forEach((p) => { p.style.transform = `translate(${look[0]}px, ${look[1]}px)`; });
-
-    // A pop of confetti when he cheers.
-    const kb = seg(t, 1040, 1500);
-    E.bits.forEach((bit, i) => {
-      if (kb <= 0 || kb >= 1) { bit.style.opacity = '0'; return; }
-      const ang = (-160 + (i * 140) / (E.bits.length - 1)) * Math.PI / 180;
-      const r = (150 + (i % 3) * 45) * outQuad(kb);
-      const x = 120 + Math.cos(ang) * r, y = 120 + Math.sin(ang) * r + kb * kb * 80;
-      bit.style.opacity = String(kb < 0.7 ? 1 : (1 - kb) / 0.3);
-      bit.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${(kb * (i % 2 ? 400 : -360)).toFixed(0)})`);
+    const opts = { duration: total / this.speed, easing: 'linear', fill: 'forwards' };
+    const $ = (sel) => this.renderRoot.querySelector(sel);
+    const $$ = (sel) => [...this.renderRoot.querySelectorAll(sel)];
+    const mine = [];
+    const anim = (el, frames) => { mine.push(el.animate(frames, opts)); };
+    anim($('.cast'), {
+      transform: all.map((p) => G(p.fold, 0, 0, `translate(${-D}px, ${f1(-sl)}px)`)),
+      opacity: all.map((p) => (p.fold.flat ? 0 : 1)),
     });
+    anim($('.drop-clip'), { transform: all.map((p) => G(p.fold, 5, 9)) });
+    anim($('.flap-clip'), { transform: all.map((p) => G(p.fold)) });
+    for (const el of $$('.sheet')) anim(el, { transform: all.map((p) => Ginv(p.fold, 'scale(1, -1) ')) });
+    for (const el of $$('.shade')) anim(el, { transform: all.map((p) => shade(p.fold)) });
+
+    if (this.withQuill) {
+      const poses = all.map((p) => p.pose);
+      // Quill: feet at pose.feet, mirrored for a backwards turn.
+      anim($('.quill'), {
+        transform: poses.map((q) => {
+          const [fx, fy] = this._mx(q.feet);
+          return `translate(${f1(fx)}px, ${f1(fy)}px) scale(${(this.s * this.turnDir * (1 + q.squash)).toFixed(4)}, ${(this.s * (1 - q.squash)).toFixed(4)})`;
+        }),
+      });
+      // Wings, eyes and the cheer are SVG, animated on the main thread, so
+      // they only animate while they move: one short animation per stretch
+      // of change, none while a value holds (an animation waiting out its
+      // delay costs nothing per frame).
+      const times = all.map((p) => p.t / this.speed);
+      const pieces = (el, values) => {
+        const keys = values.map((v) => JSON.stringify(v));
+        let first = true, a = -1;
+        const flush = (b) => {
+          el.animate(values.slice(a, b + 1), { delay: times[a], duration: Math.max(1, times[b] - times[a]), easing: 'linear', fill: first ? 'both' : 'forwards' });
+          first = false;
+        };
+        for (let i = 0; i < keys.length - 1; i++) {
+          const moving = keys[i] !== keys[i + 1];
+          if (moving && a < 0) a = i;
+          if (!moving && a >= 0) { flush(i); a = -1; }
+        }
+        if (a >= 0) flush(keys.length - 1);
+        if (first) el.animate([values[0], values[0]], { duration: 1, fill: 'both' });
+      };
+      pieces($('.wing-l'), poses.map((q) => ({ transform: `rotate(${f1(q.wingL)}deg)` })));
+      pieces($('.wing-r'), poses.map((q) => ({ transform: `rotate(${f1(q.wingR)}deg)` })));
+      const look = poses.map((q) => (q.holding ? [5, -5] : q.shout ? [0, 0] : [-6, 2]));
+      for (const el of $$('.pupil')) pieces(el, look.map(([x, y]) => ({ transform: `translate(${x}px, ${y}px)` })));
+      const shout = all.map((p) => p.pose.shout || (p.t > 560 && p.t < 760));
+      for (const el of $$('.joy, .beak-open')) pieces(el, shout.map((on) => ({ opacity: on ? 1 : 0 })));
+      for (const el of $$('.eye, .beak-shut')) pieces(el, shout.map((on) => ({ opacity: on ? 0 : 1 })));
+      // A pop of confetti when he cheers.
+      const bits = $$('.bit');
+      bits.forEach((bit, i) => {
+        const ang = (-160 + (i * 140) / (bits.length - 1)) * Math.PI / 180;
+        pieces(bit, all.map(({ t }) => {
+          const kb = seg(t, 1040, 1500);
+          const r = (150 + (i % 3) * 45) * outQuad(kb);
+          const x = 120 + Math.cos(ang) * r, y = 120 + Math.sin(ang) * r + kb * kb * 80;
+          return {
+            transform: `translate(${f1(x)}px, ${f1(y)}px) rotate(${(kb * (i % 2 ? 400 : -360)).toFixed(0)}deg)`,
+            opacity: kb <= 0 || kb >= 1 ? 0 : kb < 0.7 ? 1 : (1 - kb) / 0.3,
+          };
+        }));
+      });
+    }
+    mine[0].finished.then(() => this.remove(), () => {});
+    return pageAnims;
   }
 
   render() {
     const bitColours = ['--accent-blue', '--accent-gold', '--quill-scarf', '--accent-teal', '--accent-violet', '--accent-coral', '--quill-feather', '--accent-blue'];
     return html`
-      <svg aria-hidden="true" preserveAspectRatio="none">
-        ${BRAND_DEFS}
-        <defs>
-          <linearGradient id="pt-cast" gradientUnits="userSpaceOnUse"><stop offset="0" class="cast-a"/><stop offset="1" class="cast-b"/></linearGradient>
-          <linearGradient id="pt-back" gradientUnits="userSpaceOnUse"><stop offset="0" class="back-a"/><stop offset=".45" class="back-b"/></linearGradient>
-          <linearGradient id="pt-gleam" gradientUnits="userSpaceOnUse">
-            <stop offset=".04" class="gleam-a"/><stop offset=".14" class="gleam-b"/><stop offset=".3" class="gleam-c"/>
-          </linearGradient>
-          <pattern id="pt-rules" patternUnits="userSpaceOnUse" x="0" y="0" width="100" height="34">
-            <line class="rule" x1="0" y1="33" x2="100000" y2="33" stroke-width="1.5"/>
-            <line class="margin" x1="0" y1="0" x2="0" y2="34" stroke-width="2"/>
-          </pattern>
-          <clipPath id="pt-flap-clip"><polygon/></clipPath>
-        </defs>
-        <polygon class="cast" fill="url(#pt-cast)"/>
-        <polygon class="drop"/>
-        <polygon class="flap" fill="url(#pt-back)"/>
-        <rect clip-path="url(#pt-flap-clip)" x="-200%" y="-200%" width="500%" height="500%" fill="url(#pt-rules)"/>
-        <rect clip-path="url(#pt-flap-clip)" x="-200%" y="-200%" width="500%" height="500%" fill="url(#pt-gleam)"/>
-        <g class="quill"><g class="body">
-          ${quillFull()}
-          <path class="joy" d="M84 112Q100 86 116 112M124 112Q140 86 156 112" stroke-width="7" stroke-linecap="round" fill="none"/>
-          ${bitColours.map((c, i) => (i % 2
-            ? svg`<g class="bit"><rect x="-15" y="-8" width="30" height="16" rx="4" style="fill: var(${c})"/></g>`
-            : svg`<g class="bit"><path d="M0-20L5-5 20 0 5 5 0 20-5 5-20 0-5-5Z" style="fill: var(${c})"/></g>`))}
-        </g></g>
-      </svg>`;
+      <div class="cast"></div>
+      <div class="clip drop-clip"><div class="sheet drop"></div></div>
+      <div class="clip flap-clip"><div class="sheet flap">
+        <div class="shade back"></div><div class="rules"></div><div class="shade gleam"></div>
+      </div></div>
+      <div class="quill">
+        <svg aria-hidden="true" viewBox="-200 -220 640 720">
+          ${BRAND_DEFS}
+          <g class="body">
+            ${quillFull()}
+            <path class="joy" d="M84 112Q100 86 116 112M124 112Q140 86 156 112" stroke-width="7" stroke-linecap="round" fill="none"/>
+            ${bitColours.map((c, i) => (i % 2
+              ? svg`<g class="bit"><rect x="-15" y="-8" width="30" height="16" rx="4" style="fill: var(${c})"/></g>`
+              : svg`<g class="bit"><path d="M0-20L5-5 20 0 5 5 0 20-5 5-20 0-5-5Z" style="fill: var(${c})"/></g>`))}
+          </g>
+        </svg>
+      </div>`;
   }
 }
 

@@ -4,7 +4,7 @@
 // stale-while-revalidate and serves a cached copy immediately, catching up to
 // new JSON on the NEXT load. A returning student would otherwise run the old
 // engine against new content.
-const CACHE_NAME = 'coauthor-shell-v236';
+const CACHE_NAME = 'coauthor-shell-v237';
 // Bumped alongside CACHE_NAME here: catalog.json removal changed
 // HomeDashboard.js/TestDashboard.js's fetch behavior, but stale-while-
 // revalidate (see staleWhileRevalidate() below) serves whatever's already

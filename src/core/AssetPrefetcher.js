@@ -2,6 +2,7 @@ import { EventBus } from './EventBus.js';
 import { ContentLoader } from './ContentLoader.js';
 import { CourseSourceManager } from './CourseSourceManager.js';
 import { SimulationLoader } from './SimulationLoader.js';
+import { OfflinePrefetcher } from './OfflinePrefetcher.js';
 
 const CACHE_NAME = 'coauthor-assets-v1';
 
@@ -70,6 +71,15 @@ async function warmEntry(entry) {
   await Promise.all([warmMedia(mediaUrls(data), entry.bundleId), warmSimulation(data.simulation?.src, entry.bundleId)]);
 }
 
+/** Imports the next slide's scene module (its files are already cached by then). */
+async function warmSceneOnly(entry) {
+  let data = entry?.data;
+  if (!data && entry?.ref) {
+    try { data = await ContentLoader.loadJSON(entry.ref); } catch { return; }
+  }
+  await warmSimulation(data?.simulation?.src, entry?.bundleId);
+}
+
 /**
  * Proactively warms the *next* beat's/question's media (via the Cache API)
  * and simulation module (via SimulationLoader, whose own module-promise
@@ -91,11 +101,27 @@ export const AssetPrefetcher = {
     this._started = true;
     EventBus.on('lesson:beat-changed', (detail) => AssetPrefetcher._handle(detail));
     EventBus.on('test:beat-changed', (detail) => AssetPrefetcher._handle(detail));
+    // The whole lesson/test for offline use (D18), started alongside.
+    OfflinePrefetcher.start();
   },
 
   _handle(detail) {
-    for (const entry of detail?.next || []) {
-      warmEntry(entry).catch(() => {}); // fire-and-forget, see warmEntry's own best-effort contract
+    const preview = window.location.search.includes('preview=true') || window.location.hash.includes('preview=true');
+    if (preview) {
+      // Authoring preview: nothing is cached for offline, warm as before.
+      for (const entry of detail?.next || []) {
+        warmEntry(entry).catch(() => {}); // fire-and-forget, see warmEntry's own best-effort contract
+      }
+      return;
     }
+    // Q-45: OfflinePrefetcher fetches the next two slides' files first
+    // (JSON, prose, media, scene and plugin module graphs, narration clips),
+    // through the service worker into Cache Storage. Then the very next
+    // slide's scene module is imported from that cache, so it is ready to
+    // run the moment the learner presses Next.
+    OfflinePrefetcher.prefetchAhead(detail).then((current) => {
+      if (current === false && navigator.onLine) return; // overtaken by another slide change, or nothing ahead
+      for (const entry of detail?.next || []) warmSceneOnly(entry).catch(() => {});
+    });
   },
 };

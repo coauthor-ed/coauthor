@@ -101,6 +101,17 @@ export class Router {
       matchedRoute = 'guide-view';
       params.slug = decodeURIComponent(pathPart.slice(8));
       params.h = urlParams.get('h');
+    } else if (pathPart.startsWith('/discover/')) {
+      // A Discover store page (Q-47): bundle/<id> or module/<id>.
+      matchedRoute = 'discover-view';
+      params.id = pathPart.slice(10);
+    } else if (pathPart === '/add') {
+      // One-step add from a shared link or a course landing page (Q-53b):
+      // #/add?src=<bundle base URL>[&module=<module JSON id>]. Raw strings
+      // here; AddCourseView checks them before any use.
+      matchedRoute = 'add-course';
+      params.src = urlParams.get('src');
+      params.module = urlParams.get('module');
     } else {
       matchedRoute = this.routes[pathPart] || 'not-found';
       if (matchedRoute === 'guides-index') params.for = urlParams.get('for');

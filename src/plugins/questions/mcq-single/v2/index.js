@@ -4,8 +4,10 @@ import '../../../../ui/components/MarkdownRenderer.js';
 import '../../../../core/components/FeedbackBanner.js';
 import '../../../../core/components/QuestionExplanation.js';
 import { brandCopy, brandIcon } from '../../../../ui/components/LookSlots.js';
-import { blockImageLayoutStyles, renderBlockImage, blockLayoutClass } from '../../../../core/components/blockImageLayout.js';
-import { mountQuestionSimulation, destroyQuestionSimulation, renderSimControls, renderSimCard } from '../../../../core/components/simulationHost.js';
+import { blockImageLayoutStyles, renderBlockImage, blockLayoutClass, BlockImageFitController } from '../../../../core/components/blockImageLayout.js';
+import {
+  mountQuestionSimulation, destroyQuestionSimulation, renderSimControls, renderSimCard, setupSimFitStyles, fitSetupSimAtRest,
+} from '../../../../core/components/simulationHost.js';
 import { mountQuestionGraph, renderGraphCard } from '../../../../core/components/graphHost.js';
 import { mountQuestionDiagram, renderDiagramCard } from '../../../../core/components/diagramHost.js';
 import { btn3dStyles, choiceSurfaceStyles, feedbackAnimStyles, optionKeyStyles, optionKeyLetter, plainChoiceStyles } from '../../../../ui/sharedStyles.js';
@@ -193,7 +195,7 @@ export class MCQSingle extends LookMixin(LitElement) {
       background: var(--sim-bg-deep, #0a0f1e);
       line-height: 0;
     }
-    .q-sim-host-container canvas {
+    .q-sim-host-container canvas:not([data-sim-own-size]):not(.sim-dom-root canvas[style*="width"], .sim-dom-root canvas[style*="height"]) {
       width: 100% !important;
       height: auto !important;
       display: block;
@@ -354,7 +356,7 @@ export class MCQSingle extends LookMixin(LitElement) {
         max-width: 100%;
       }
     }
-  `, plainChoiceStyles, plainAnswerPanelStyles];
+  `, setupSimFitStyles, plainChoiceStyles, plainAnswerPanelStyles];
 
   static properties = {
     _data: { type: Object, state: true },
@@ -396,6 +398,15 @@ export class MCQSingle extends LookMixin(LitElement) {
     // _maybeObserveSimCard().
     this._simCardVisible = false;
     this._simCardObserver = null;
+
+    // Q-60: image height fit + fit-at-rest (blockImageLayout.js), and the
+    // listeners the setup-sim fit re-measures on.
+    this._mediaFit = new BlockImageFitController(this, {
+      image: () => this._data?.image,
+      bundleId: () => this._ctx?.bundleId,
+      active: () => !this._ctx?.previewOnly && !!(this._data?.image?.src
+        || (this._data?.simulation?.src && this._data.simulation.role === 'setup')),
+    });
   }
 
   /**
@@ -525,6 +536,7 @@ export class MCQSingle extends LookMixin(LitElement) {
    *  existed. Not beat-synced — see simulationHost.js's header comment. */
   updated(changedProperties) {
     super.updated?.(changedProperties);
+    if (!this._ctx?.previewOnly) fitSetupSimAtRest(this.shadowRoot);
     this._maybeMountGraph();
     this._maybeMountDiagram();
     const sim = this._data?.simulation;
@@ -709,10 +721,11 @@ export class MCQSingle extends LookMixin(LitElement) {
       `;
     }
     if (!image?.src) return html`${content}${simFab}`;
+    const fit = this._mediaFit.resolve();
     return html`
-      <div class="${blockLayoutClass(image, null)}">
+      <div class="${fit ? `cb-layout-${fit.layout}` : blockLayoutClass(image, null)}">
         <div class="cb-text">${content}</div>
-        ${renderBlockImage(image, { bundleId: this._ctx?.bundleId })}
+        ${renderBlockImage(image, { capped: fit?.capped, zoomAffordance: fit?.zoomAffordance, widthPx: fit?.widthPx, bundleId: this._ctx?.bundleId })}
       </div>
       ${simFab}
     `;

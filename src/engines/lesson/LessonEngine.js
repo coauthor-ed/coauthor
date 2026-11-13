@@ -162,6 +162,16 @@ export class LessonEngine {
       return;
     }
 
+    // A linear lesson may list its blocks as bare path strings instead of
+    // { blockRef } objects (personal-finances les-02 shipped that way and
+    // mounted nothing). Accept both: copy so the cached JSON stays as is.
+    if (Array.isArray(this.lessonData.blocks) && this.lessonData.blocks.some((b) => typeof b === 'string')) {
+      this.lessonData = {
+        ...this.lessonData,
+        blocks: this.lessonData.blocks.map((b) => (typeof b === 'string' ? { blockRef: b } : b)),
+      };
+    }
+
     // Determine mode
     if (this.lessonData.flow && this.lessonData.flowStart) {
       this._mode = 'flow';
@@ -170,6 +180,17 @@ export class LessonEngine {
       this._mode = 'linear';
       this._currentIndex = 0;
     }
+
+    // Offline (D18): OfflinePrefetcher caches the whole lesson in the
+    // background, every block, question, media file, simulation and the
+    // libraries they need, not only the slides visited online.
+    EventBus.emit('lesson:opened', {
+      lessonId: this.lessonId,
+      bundleId: this._bundleId,
+      entries: this._allBlockEntries(),
+      narrationRef: this.lessonData.narrationRef || null,
+      profileId: this.profileId,
+    });
 
     // Restore progress
     const saved = await ProgressStore.get('lessonProgress', [this.profileId, this.lessonId]);
@@ -532,6 +553,7 @@ export class LessonEngine {
   setNarrated(on) {
     this._narrated = !!on;
     if (!this._narrated) this._sceneStates.clear();
+    if (!this._narrated) { this._narrCalm = false; this._narrReading = false; this.setNarrationPromptHold(false); }
     this._mountedEl?.setNarrated?.(this._narrated);
   }
 
@@ -578,6 +600,52 @@ export class LessonEngine {
       this._notifyProgress();
       this._notifyPosition();
     }
+  }
+
+  /** Narrated and only listening (spec W1 D29n): the block may let its own
+   *  furniture (figure captions, scene tool buttons) step back. */
+  setNarrationCalm(on) {
+    this._narrCalm = !!on && this._narrated;
+    this._mountedEl?.setNarrationCalm?.(this._narrCalm);
+  }
+
+  /** Narrated, playing, one phrase at a time (spec W1 D29n): a text slide
+   *  holds its prose back while the caption reads it phrase by phrase. */
+  setNarrationReading(on) {
+    this._narrReading = !!on && this._narrated;
+    this._mountedEl?.setNarrationReading?.(this._narrReading);
+  }
+
+  /** Narrated and a question/exercise/game prompt is being spoken (spec W1
+   *  D29n, Q-77): its card stays out of sight, keeping its room, until the
+   *  prompt's last phrase; the caption carries the words meanwhile. The
+   *  engine owns the mount, so it hides the mounted block's wrapper. */
+  setNarrationPromptHold(on) {
+    this._narrHold = !!on && this._narrated;
+    this._applyPromptHold();
+  }
+
+  _applyPromptHold() {
+    // A block with an opening picture (narrationCover, Q-90) holds itself:
+    // the picture shows in place of the card, so its wrapper stays visible.
+    if (this._mountedEl?.narrationCoverHold?.(!!this._narrHold)) return;
+    const w = this._mountedEl?.parentElement;
+    if (!w || w === this.container) {
+      if (this._mountedEl) this._holdStyle(this._mountedEl);
+      return;
+    }
+    this._holdStyle(w);
+  }
+
+  _holdStyle(el) {
+    const on = !!this._narrHold;
+    if (!on && !el.hasAttribute('data-narr-hold')) return;
+    el.toggleAttribute('data-narr-hold', on);
+    const calm = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    el.style.transition = on || calm ? '' : 'opacity 360ms ease-out';
+    el.style.opacity = on ? '0' : '';
+    el.style.visibility = on ? 'hidden' : '';
+    if (!on && !calm) setTimeout(() => { if (!el.hasAttribute('data-narr-hold')) el.style.transition = ''; }, 400);
   }
 
   /** A narration cue reached its word: the mounted scene's onCue(id), once a beat. */
@@ -728,6 +796,9 @@ export class LessonEngine {
       this._blockData = await hydrateProseRefs(blockData.data ?? blockData, this._bundleId, blockData.type);
       const boundary = mountPlugin(blockData.type, this._blockData, this.container, ctx);
       this._mountedEl = boundary?.firstElementChild ?? null;
+      if (this._narrated && this._narrCalm) this._mountedEl?.setNarrationCalm?.(true);
+      if (this._narrated && this._narrReading) this._mountedEl?.setNarrationReading?.(true);
+      if (this._narrated && this._narrHold) this._applyPromptHold();
       this._mountedBlockIndex = this._mode === 'linear' ? this._currentIndex : null;
 
       // Hook into block's onAnswer for flow branching
@@ -776,6 +847,9 @@ export class LessonEngine {
       lessonId: this.lessonId,
       current: this._blockData,
       next: this._nextBlockEntries(),
+      // The next two slides (Q-45): OfflinePrefetcher fetches all they need
+      // ahead of the learner, before the rest of the lesson.
+      ahead: this._aheadBlockEntries(2),
     });
 
     this._notifyPosition();
@@ -805,13 +879,8 @@ export class LessonEngine {
    */
   _nextBlockEntries() {
     if (this._mode === 'linear') {
-      const next = (this.lessonData.blocks || [])[this._currentIndex + 1];
-      if (!next) return [];
-      if (next.blockRef) {
-        const refPath = CourseSourceManager.resolveRef(next.blockRef, this._bundleId);
-        return [{ ref: refPath.endsWith('.json') ? refPath : `${refPath}.json`, bundleId: this._bundleId }];
-      }
-      return [{ data: next, bundleId: this._bundleId }];
+      const next = this._linearEntry((this.lessonData.blocks || [])[this._currentIndex + 1]);
+      return next ? [next] : [];
     }
     const node = this.lessonData.flow?.[this._currentNodeId];
     if (!node) return [];
@@ -819,12 +888,77 @@ export class LessonEngine {
     return nextNodeIds
       .map((nodeId) => this.lessonData.flow?.[nodeId]?.block)
       .filter(Boolean)
-      .map((blockRef) => {
-        const path = blockRef.includes(':')
-          ? (() => { const basePath = blockRef.replace(':', '/'); return blockRef.startsWith('/') ? blockRef : `/content/${basePath}${basePath.endsWith('.json') ? '' : '.json'}`; })()
-          : (() => { const r = CourseSourceManager.resolveRef(blockRef, this._bundleId); return r.endsWith('.json') ? r : `${r}.json`; })();
-        return { ref: path, bundleId: this._bundleId };
-      });
+      .map((blockRef) => this._flowEntry(blockRef));
+  }
+
+  /**
+   * The blocks up to `depth` slides after the current one, nearest first,
+   * in the same entry shape as _nextBlockEntries(). Flow mode follows every
+   * branch, capped at 6 entries.
+   */
+  _aheadBlockEntries(depth = 2) {
+    if (this._mode === 'linear') {
+      const blocks = this.lessonData.blocks || [];
+      const out = [];
+      for (let i = 1; i <= depth; i++) {
+        const e = this._linearEntry(blocks[this._currentIndex + i]);
+        if (e) out.push(e);
+      }
+      return out;
+    }
+    const flow = this.lessonData.flow || {};
+    const out = [];
+    const seenIds = new Set([this._currentNodeId]);
+    let level = [this._currentNodeId];
+    for (let d = 0; d < depth && out.length < 6; d++) {
+      const nextLevel = [];
+      for (const id of level) {
+        const node = flow[id];
+        if (!node) continue;
+        for (const n of node.branches ? Object.values(node.branches) : (node.next ? [node.next] : [])) {
+          if (seenIds.has(n)) continue;
+          seenIds.add(n);
+          nextLevel.push(n);
+          if (flow[n]?.block && out.length < 6) out.push(this._flowEntry(flow[n].block));
+        }
+      }
+      level = nextLevel;
+    }
+    return out;
+  }
+
+  /**
+   * Every block the lesson can show, in the same entry shape as
+   * _nextBlockEntries(): all of lessonData.blocks in linear mode, every
+   * flow node's block in flow mode. OfflinePrefetcher (via
+   * 'lesson:opened') caches all of them so the lesson works offline.
+   */
+  _allBlockEntries() {
+    if (this._mode === 'linear') {
+      return (this.lessonData.blocks || []).map((b) => this._linearEntry(b)).filter(Boolean);
+    }
+    return Object.values(this.lessonData.flow || {})
+      .map((node) => node?.block)
+      .filter(Boolean)
+      .map((blockRef) => this._flowEntry(blockRef));
+  }
+
+  /** One linear-mode lessonData.blocks[] item as a prefetch entry. */
+  _linearEntry(block) {
+    if (!block) return null;
+    if (block.blockRef) {
+      const refPath = CourseSourceManager.resolveRef(block.blockRef, this._bundleId);
+      return { ref: refPath.endsWith('.json') ? refPath : `${refPath}.json`, bundleId: this._bundleId };
+    }
+    return { data: block, bundleId: this._bundleId };
+  }
+
+  /** One flow node's block ref as a prefetch entry (same resolution as _render()). */
+  _flowEntry(blockRef) {
+    const path = blockRef.includes(':')
+      ? (() => { const basePath = blockRef.replace(':', '/'); return blockRef.startsWith('/') ? blockRef : `/content/${basePath}${basePath.endsWith('.json') ? '' : '.json'}`; })()
+      : (() => { const r = CourseSourceManager.resolveRef(blockRef, this._bundleId); return r.endsWith('.json') ? r : `${r}.json`; })();
+    return { ref: path, bundleId: this._bundleId };
   }
 
   async _complete() {

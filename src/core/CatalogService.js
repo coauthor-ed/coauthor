@@ -1,5 +1,6 @@
 import { CourseSourceManager } from './CourseSourceManager.js';
 import { readCourseMeta } from './courseMeta.js';
+import { readShowcase, textOf, deriveFacts, syllabusAlignment, readDigest } from './showcaseMeta.js';
 import { ErrorReporter } from './ErrorReporter.js';
 import { CATALOG_URL, PUBLISH_IS_PLACEHOLDER, INSTALL_COUNTER } from '../config/publishing.js';
 
@@ -61,7 +62,11 @@ export function validateCatalog(raw) {
     if (!id || !Array.isArray(c.entries)) { warn('skipping bad catalog collection', { collection: c }); continue; }
     collections.push({ id, title: { en: str(c.title?.en) || id }, entries: c.entries.filter((x) => typeof x === 'string') });
   }
-  return { catalogVersion: 1, updatedAt: str(raw.updatedAt), entries, collections };
+  // Optional (Q-47): the order and display names of bundles on Discover.
+  const bundles = (Array.isArray(raw.bundles) ? raw.bundles : [])
+    .filter((b) => str(b?.id))
+    .map((b) => ({ id: str(b.id), title: { en: str(b.title?.en) || str(b.title) }, ...(Number.isFinite(b.order) ? { order: b.order } : {}) }));
+  return { catalogVersion: 1, updatedAt: str(raw.updatedAt), entries, collections, bundles };
 }
 
 function readCache() {
@@ -237,4 +242,127 @@ export function countInstall(bundleId, counter = INSTALL_COUNTER) {
     if (typeof navigator !== 'undefined' && navigator.sendBeacon && navigator.sendBeacon(counter.endpoint, payload)) return;
     fetch(counter.endpoint, { method: 'POST', body: payload, keepalive: true, mode: 'no-cors' }).catch(() => {});
   } catch { /* never block add-to-shelf */ }
+}
+
+/* ---------- Discover store pages (Q-47): bundles, module facts ---------- */
+
+/**
+ * Group entries by their bundle (the catalog row's `series`: one published
+ * course repo, e.g. cbse-grade9-science). Order: the catalog's optional
+ * `bundles` list (additive: [{ id, title: {en}, order? }]), then school before
+ * college, then first appearance. Drafts are left out (D29 item 8).
+ * Pure. Returns [{ id, title, audience, entries }].
+ */
+export function groupByBundle(entries, catalog) {
+  const meta = new Map();
+  (Array.isArray(catalog?.bundles) ? catalog.bundles : []).forEach((b, i) => {
+    const id = str(b?.id);
+    if (id) meta.set(id, { title: str(b.title?.en) || str(b.title), order: Number.isFinite(b.order) ? b.order : i });
+  });
+  const groups = new Map();
+  entries.forEach((e, i) => {
+    if (e.manifest?.status === 'draft') return;
+    const id = e.series || `single:${e.id}`;
+    if (!groups.has(id)) groups.set(id, { id, title: meta.get(id)?.title || '', audience: e.meta?.audience || '', first: i, entries: [] });
+    groups.get(id).entries.push(e);
+  });
+  const rank = (g) => (meta.has(g.id) ? meta.get(g.id).order : 1000 + (g.audience === 'college' || g.audience === 'adult' ? 1000 : 0) + g.first);
+  return [...groups.values()].sort((a, b) => rank(a) - rank(b)).map(({ first, ...g }) => g);
+}
+
+/** The bundle-manifest.json URL of a bundle: one folder above its first entry's manifest. */
+export function bundleManifestUrl(bundle) {
+  const first = bundle?.entries?.[0];
+  if (!first || !bundle.id || bundle.id.startsWith('single:')) return null;
+  return httpUrl('../bundle-manifest.json', first.manifestUrl);
+}
+
+const _bundleInfo = new Map();
+/** The bundle's own manifest (title, description, blurb, highlights, cover); memoised; {} on failure. */
+export function loadBundleInfo(bundle) {
+  const url = bundleManifestUrl(bundle);
+  if (!url) return Promise.resolve({});
+  if (!_bundleInfo.has(url)) {
+    _bundleInfo.set(url, (async () => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const bm = await res.json();
+        const s = readShowcase(bm);
+        return {
+          url,
+          title: textOf(bm.title),
+          ...s,
+          cover: httpUrl(s.cover, url),
+          // make-landing.mjs writes cover.jpg beside a bundle with no cover of its own.
+          coverFallback: httpUrl('cover.jpg', url),
+        };
+      } catch (e) { warn(`bundle manifest unreadable: ${e.message}`, { url }); return {}; }
+    })());
+  }
+  return _bundleInfo.get(url);
+}
+
+const _facts = new Map();
+/**
+ * Module facts for one entry, derived from its content: modules with their
+ * lesson titles (module JSON), and from the lesson JSONs the lesson count,
+ * Narrated (a narrationRef sidecar) and the syllabus line (chapterIds).
+ * Memoised per manifest URL. Lesson files are fetched 4 at a time.
+ */
+export function loadFacts(entry) {
+  const key = entry.manifestUrl;
+  if (!_facts.has(key)) {
+    _facts.set(key, (async () => {
+      const m0 = entry.meta || {};
+      const align = (ids) => syllabusAlignment(ids, { board: m0.board, grade: m0.grade, subject: m0.subjects?.[0] || entry.manifest?.subject });
+      // A staged manifest carries a digest (make-digest.mjs): no lesson fetches.
+      const dg = readDigest(entry.manifest);
+      if (dg) return { ...dg, alignment: align(dg.chapterIds) };
+      const base = entry.manifestUrl;
+      const getJson = async (rel) => {
+        const url = httpUrl(rel, base);
+        if (!url) return null;
+        try { const r = await fetch(url); return r.ok ? await r.json() : null; } catch { return null; }
+      };
+      const modules = [];
+      for (const rel of Array.isArray(entry.manifest?.modules) ? entry.manifest.modules : []) {
+        const mod = await getJson(rel);
+        if (!mod) continue;
+        modules.push({
+          id: str(mod.id),
+          title: textOf(mod.title),
+          lessons: (Array.isArray(mod.lessons) ? mod.lessons : []).map((l) => ({ ref: str(l?.lessonRef), title: textOf(l?.title) })),
+        });
+      }
+      const refs = modules.flatMap((m) => m.lessons.map((l) => l.ref)).filter(Boolean);
+      const lessonJsons = new Array(refs.length).fill(null);
+      let next = 0;
+      await Promise.all([0, 1, 2, 3].map(async () => {
+        while (next < refs.length) { const i = next++; lessonJsons[i] = await getJson(refs[i]); }
+      }));
+      const facts = deriveFacts(lessonJsons);
+      const m = entry.meta || {};
+      return {
+        modules,
+        lessonCount: refs.length || facts.lessonCount,
+        narrated: facts.narrated,
+        chapterIds: facts.chapterIds,
+        alignment: syllabusAlignment(facts.chapterIds, { board: m.board, grade: m.grade, subject: m.subjects?.[0] || entry.manifest?.subject }),
+      };
+    })());
+  }
+  return _facts.get(key);
+}
+
+/** Store-page fields of one entry with every path resolved to an http(s) URL. */
+export function entryShowcase(entry) {
+  const s = readShowcase(entry.manifest);
+  const base = entry.manifestUrl;
+  return {
+    ...s,
+    cover: httpUrl(s.cover, base),
+    screenshots: s.screenshots.map((sh) => ({ url: httpUrl(sh.src, base), caption: sh.caption })).filter((sh) => sh.url),
+    screencast: s.screencast ? { url: httpUrl(s.screencast.src, base), poster: httpUrl(s.screencast.poster, base) } : null,
+  };
 }

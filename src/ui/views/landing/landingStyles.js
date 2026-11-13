@@ -187,6 +187,8 @@ export const landingStyles = css`
   /* Ambient loops: paused unless their section is on screen. */
   .amb { animation-play-state: paused !important; }
   [data-live] .amb { animation-play-state: running !important; }
+  /* Paused in their own animation shorthands below too: a later shorthand
+     resets the play state, which let both run off-screen (Q-56). */
   .typing i, .tip svg { animation-play-state: paused; }
   [data-live] .typing i, [data-live] .tip svg { animation-play-state: running; }
 
@@ -486,7 +488,7 @@ export const landingStyles = css`
   .s-pink { stop-color: var(--landing-display-grad-3); }
   .tip { position: absolute; z-index: 0; left: 0; top: 0; width: 0; height: 0; pointer-events: none; }
   .tip::before { content: ''; position: absolute; left: -22px; top: -22px; width: 44px; height: 44px; border-radius: 50%; background: radial-gradient(circle, var(--landing-planet-rim) 0%, color-mix(in srgb, var(--landing-explorer) 40%, transparent) 40%, transparent 70%); }
-  .tip svg { position: absolute; left: -12px; top: -12px; width: 24px; height: 24px; fill: var(--landing-floe); animation: spin 6s linear infinite; }
+  .tip svg { position: absolute; left: -12px; top: -12px; width: 24px; height: 24px; fill: var(--landing-floe); animation: spin 6s linear infinite paused; }
   @keyframes spin { to { transform: rotate(360deg); } }
 
   .stop {
@@ -753,7 +755,7 @@ export const landingStyles = css`
   .msg { opacity: 0; transform: translateY(14px) scale(0.96); }
   .in .msg { opacity: 1; transform: none; transition: opacity 400ms ease calc(var(--t) * 1s), transform 500ms var(--ease-spring) calc(var(--t) * 1s); }
   .typing { display: inline-flex; gap: 5px; padding: 14px 16px; border-radius: 20px 20px 20px 6px; background: var(--landing-night-panel); border: 1.5px solid var(--landing-night-edge); }
-  .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--landing-on-night-soft); animation: dot 900ms ease-in-out infinite; }
+  .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--landing-on-night-soft); animation: dot 900ms ease-in-out infinite paused; }
   .typing i:nth-child(2) { animation-delay: 150ms; } .typing i:nth-child(3) { animation-delay: 300ms; }
   @keyframes dot { 0%, 100% { transform: translateY(0); opacity: 0.4; } 50% { transform: translateY(-4px); opacity: 1; } }
   .msg.tp { opacity: 0; max-height: 0; overflow: hidden; margin-top: -12px; }

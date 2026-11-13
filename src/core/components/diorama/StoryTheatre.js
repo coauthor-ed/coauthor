@@ -831,7 +831,12 @@ export class StoryTheatre {
     const divT = div ? (tall ? div.offsetHeight : div.offsetWidth) : 18;
     const span = (tall ? root.clientHeight : root.clientWidth) - divT;
     const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
-    const limits = splitLimits({ tall, span, rem, reserve: tall ? this._chrome(win) : 2 * this._rule });
+    // Docked tall (a phone): the scene keeps its full-width length up to 60%
+    // of the span; a longer beat scrolls inside its own pane (Q-84: at 390 px
+    // long text squeezed scenes to 250-300 px wide and pushed them under the fold).
+    const fullLen = tall && !this.isMax ? (root.clientWidth - 2 * this._rule - this._side()) / this._aspect + this._chrome(win) : 0;
+    const sceneFloor = fullLen > 0 && Number.isFinite(fullLen) ? Math.min(fullLen, span * 0.6) : 0;
+    const limits = splitLimits({ tall, span, rem, reserve: tall ? this._chrome(win) : 2 * this._rule, sceneFloor });
     // The plain look's page: a book measure (about 66 characters) for the text.
     if (this.editorial && !tall) limits.read = Math.min(limits.read, Math.round(36 * rem));
     const step = this.host._step;
@@ -899,7 +904,16 @@ export class StoryTheatre {
       // Docked (or under a floating story): the frame hugs the scene, no empty bands inside it.
       const side = this._side() + this._railW(root);
       // Narrated: keep a caption band free under a height-limited scene.
-      const capBand = this.narrated ? Math.min(96, Math.max(48, Math.round(slot.clientHeight * 0.2))) : 0;
+      let capBand = this.narrated ? Math.min(96, Math.max(48, Math.round(slot.clientHeight * 0.2))) : 0;
+      // Q-85: the band is the caption's two-line box plus a gap above and
+      // below it; the room the slot already leaves above the action bar
+      // counts towards it (at 1280x720 14 px, so 82 px, not 96, and the
+      // narrated scene is no smaller than in text mode).
+      if (capBand && this.orient !== 'tall' && typeof window !== 'undefined') {
+        const bar = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--lesson-chrome-bottom')) || 0;
+        const room = window.innerHeight - bar - slot.getBoundingClientRect().bottom;
+        capBand -= Math.max(0, Math.min(16, Math.round(room)));
+      }
       // Tall (portrait): the band sits above the scene, where captions read first.
       slot.style.paddingTop = capBand && this.orient === 'tall' ? `${capBand}px` : '';
       box = fitAspect(Math.min(slot.clientWidth - 2 * this._rule - side, this._maxSceneW), slot.clientHeight - this._chrome(win) - capBand, this._aspect);

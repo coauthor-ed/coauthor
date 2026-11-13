@@ -24,6 +24,9 @@
 
  *     xDomain?: [min, max], yDomain?: [min, max],
  *     showGrid?: boolean,            // default true
+ *     editorial?: boolean,           // the plain look's chart: y label as a line of text over the plot, light
+ *                                    // horizontal rules only, muted sans ticks, line series labelled at their end,
+ *                                    // dot labels placed clear of the marks (read-only plots)
  *     a11yCaption?: string,          // for <caption> in the text-table fallback
  *     interactive?: {
  *       enabled: boolean,
@@ -137,7 +140,7 @@ export class GraphPlotter {
     const d3 = await loadD3();
     const {
       type = 'line', series = [], xLabel = '', yLabel = '', a11yCaption,
-      showGrid = true, interactive, xStep, yStep,
+      showGrid = true, interactive, xStep, yStep, editorial = false,
     } = config;
 
     const rect = svgEl.getBoundingClientRect();
@@ -174,7 +177,29 @@ export class GraphPlotter {
       probe.remove();
       return out;
     };
-    const yFit = fitLabel(yLabel, H - margin.top - margin.bottom);
+    // Editorial: the y label is a line of text over the plot (wrapped to the
+    // plot's width), not rotated up the side, so a long label never shrinks.
+    const wrapLines = (text, avail, fs) => {
+      if (!text) return [];
+      const probe = d3.select(svgEl).append('text').attr('font-weight', 600).attr('font-size', fs).attr('font-family', 'inherit');
+      const width = (t) => { probe.text(t); return probe.node().getComputedTextLength?.() || t.length * fs * 0.55; };
+      const lines = [];
+      let cur = '';
+      for (const wd of text.split(/\s+/)) {
+        const next = cur ? `${cur} ${wd}` : wd;
+        if (cur && width(next) > avail) { lines.push(cur); cur = wd; } else cur = next;
+      }
+      if (cur) lines.push(cur);
+      probe.remove();
+      return lines;
+    };
+    let yTop = [];
+    if (editorial) {
+      margin.left = 40; margin.right = 18;
+      yTop = wrapLines(yLabel, W - 8, 13);
+      margin.top = 10 + yTop.length * 17 + 8;
+    }
+    const yFit = editorial ? { size: 13, lines: [] } : fitLabel(yLabel, H - margin.top - margin.bottom);
     if (yFit.lines.length > 1) margin.left += 15;
     const xFit = fitLabel(xLabel, W - margin.left - margin.right);
     if (xFit.lines.length > 1) margin.bottom += 15;
@@ -199,6 +224,9 @@ export class GraphPlotter {
 
     const gridColor = themeColor(svgEl, '--border-color', '#e2e8f0');
     const textColor = themeColor(svgEl, '--text-main', '#0f172a');
+    const mutedColor = editorial ? themeColor(svgEl, '--text-muted', textColor) : textColor;
+    const ruleColor = editorial ? themeColor(svgEl, '--fig-rule', gridColor) : gridColor;
+    const groundColor = themeColor(svgEl, '--fig-ground', themeColor(svgEl, '--bg-main', 'transparent'));
 
     // When interactive, gridlines/ticks must mark only positions a click can
     // snap to — otherwise the axis shows values (e.g. 0.5) the student can
@@ -246,7 +274,13 @@ export class GraphPlotter {
     const makeXLabelAxis = () => xLabelTicks ? d3.axisBottom(xScale).tickValues(xLabelTicks).tickFormat(xFmt || xScale.tickFormat()) : makeXAxis();
     const makeYLabelAxis = () => yLabelTicks ? d3.axisLeft(yScale).tickValues(yLabelTicks).tickFormat(yFmt || yScale.tickFormat()) : makeYAxis();
 
-    if (showGrid) {
+    if (showGrid && editorial) {
+      svg.append('g')
+        .attr('class', 'gp-grid-y')
+        .call(makeYAxis().tickSize(-innerW).tickFormat(''))
+        .call(g => g.select('.domain').remove())
+        .call(g => g.selectAll('line').attr('stroke', ruleColor).attr('stroke-width', 1));
+    } else if (showGrid) {
       svg.append('g')
         .attr('class', 'gp-grid-x')
         .attr('transform', `translate(0,${innerH})`)
@@ -266,23 +300,35 @@ export class GraphPlotter {
     [xAxis, yAxis].forEach(g => {
       g.select('.domain').attr('stroke', textColor);
       g.selectAll('line').attr('stroke', textColor);
-      g.selectAll('text').attr('fill', textColor);
+      g.selectAll('text').attr('fill', mutedColor);
       g.attr('font-size', 13).attr('font-family', 'inherit');
     });
+    if (editorial) {
+      yAxis.select('.domain').remove();
+      yAxis.selectAll('line').remove();
+      xAxis.selectAll('line').attr('stroke', ruleColor);
+    }
 
     // Axis labels
     // Each label's lines run outward from the axis: the last line sits where a
     // one-line label would, earlier lines one line further out (y label) or
     // the first line in place and the second below it (x label).
     const xText = svg.append('text')
-      .attr('x', innerW / 2).attr('y', innerH + 36)
-      .attr('text-anchor', 'middle').attr('font-size', xFit.size).attr('font-weight', 600).attr('fill', textColor);
-    xFit.lines.forEach((ln, i) => xText.append('tspan').attr('x', innerW / 2).attr('dy', i ? 15 : 0).text(ln));
+      .attr('x', editorial ? innerW : innerW / 2).attr('y', innerH + 36)
+      .attr('text-anchor', editorial ? 'end' : 'middle').attr('font-size', editorial ? 13 : xFit.size).attr('font-weight', 600).attr('fill', mutedColor);
+    xFit.lines.forEach((ln, i) => xText.append('tspan').attr('x', editorial ? innerW : innerW / 2).attr('dy', i ? 15 : 0).text(ln));
+    if (editorial) {
+      const t = svg.append('text').attr('class', 'gp-ylabel').attr('x', -margin.left + 4).attr('y', -margin.top + 10 + 13)
+        .attr('font-size', 13).attr('font-weight', 600).attr('fill', mutedColor);
+      yTop.forEach((ln, i) => t.append('tspan').attr('x', -margin.left + 4).attr('dy', i ? 17 : 0).text(ln));
+    }
+    if (!editorial) {
     const yText = svg.append('text')
       .attr('transform', 'rotate(-90)')
       .attr('x', -innerH / 2).attr('y', -44 - 15 * (yFit.lines.length - 1))
       .attr('text-anchor', 'middle').attr('font-size', yFit.size).attr('font-weight', 600).attr('fill', textColor);
     yFit.lines.forEach((ln, i) => yText.append('tspan').attr('x', -innerH / 2).attr('dy', i ? 15 : 0).text(ln));
+    }
 
     // Shaded areas first, so every curve and dot sits on top of them. The
     // base is y = 0 clamped into the visible range; a [x0, x1] fill shades
@@ -303,6 +349,66 @@ export class GraphPlotter {
     // Series — each may override the chart-level `type` (e.g. a smooth
     // target-function curve alongside a handful of scored `scatter` points
     // in the same plot, as plot-function@1 does once revealed).
+    // Dots that would overlap (a run of cases at nearly the same x and y)
+    // stack upward instead, a dot plot, so each one stays countable. Placed
+    // once over every dotted series, so the labels below can avoid them all.
+    const marks = [];   // { x, y, r } placed dots, plot px
+    const curves = [];  // [x, y] samples along the drawn lines, plot px
+    const dotSeries = series.map((s) => {
+      const st = s.type || type;
+      if (!((st === 'line' && s.dots !== false) || st === 'scatter') || !s.points?.length) return null;
+      const raw = s.points.map((d) => ({ d, x: xScale(d.x), y: yScale(d.y) }));
+      const sorted = [...raw].sort((a, b) => a.x - b.x);
+      let crowd = Infinity;
+      for (let k = 1; k < sorted.length; k++) crowd = Math.min(crowd, Math.hypot(sorted[k].x - sorted[k - 1].x, sorted[k].y - sorted[k - 1].y));
+      const r = crowd < 9 ? 3.6 : 4;
+      const gap = 2 * r + 0.6;
+      for (const p of sorted) {
+        let y = p.y;
+        const up = p.y > 2 * gap;
+        for (let k = 0; k < 12 && marks.some((m) => Math.hypot(m.x - p.x, m.y - y) < gap); k++) y = p.y + (up ? -1 : 1) * (k + 1) * gap;
+        p.py = y; p.r = r;
+        marks.push({ x: p.x, y, r });
+      }
+      return raw;
+    });
+    series.forEach((s) => {
+      if ((s.type || type) === 'line' && s.points?.length > 1) for (const d of s.points) curves.push([xScale(d.x), yScale(d.y)]);
+    });
+    // Densify the curve samples so a label box between two samples still sees the line.
+    const curvePts = [];
+    for (let k = 1; k < curves.length; k++) {
+      const [x0, y0] = curves[k - 1], [x1, y1] = curves[k];
+      if (x1 < x0) continue;
+      const n = Math.max(1, Math.ceil(Math.hypot(x1 - x0, y1 - y0) / 6));
+      for (let j = 0; j <= n; j++) curvePts.push([x0 + (x1 - x0) * j / n, y0 + (y1 - y0) * j / n]);
+    }
+    const textW = (t, fs) => {
+      const probe = svg.append('text').attr('font-size', fs).attr('font-weight', 600).attr('font-family', 'inherit').text(t);
+      const w = probe.node().getComputedTextLength?.() || t.length * fs * 0.55;
+      probe.remove();
+      return w;
+    };
+    const placed = [];  // label boxes already placed
+    const hits = (b) => b.x0 < 0 || b.x1 > innerW + margin.right - 2 || b.y0 < -margin.top + 4 || b.y1 > innerH
+      || marks.some((m) => m.x + m.r > b.x0 && m.x - m.r < b.x1 && m.y + m.r > b.y0 && m.y - m.r < b.y1)
+      || curvePts.some(([x, y]) => x > b.x0 - 2 && x < b.x1 + 2 && y > b.y0 - 2 && y < b.y1 + 2)
+      || placed.some((o) => o.x0 < b.x1 && o.x1 > b.x0 && o.y0 < b.y1 && o.y1 > b.y0);
+    /** First box among candidates (cx = text-anchor x, by = baseline) that hits nothing; else the first. */
+    const placeLabel = (w, fs, cands) => {
+      const box = ([cx, by, anchor]) => {
+        const x0 = anchor === 'end' ? cx - w : anchor === 'middle' ? cx - w / 2 : cx;
+        return { x0, x1: x0 + w, y0: by - fs, y1: by + 3, cx, by, anchor };
+      };
+      const boxes = cands.map(box);
+      const pick = boxes.find((b) => !hits(b)) || boxes[0];
+      placed.push(pick);
+      return pick;
+    };
+    const halo = (sel) => (editorial && groundColor !== 'transparent'
+      ? sel.attr('stroke', groundColor).attr('stroke-width', 4).attr('stroke-linejoin', 'round').attr('paint-order', 'stroke')
+      : sel);
+
     series.forEach((s, i) => {
       const color = resolveColor(svgEl, s.color);
       const seriesType = s.type || type;
@@ -316,29 +422,49 @@ export class GraphPlotter {
             .datum(s.points)
             .attr('fill', 'none')
             .attr('stroke', color)
-            .attr('stroke-width', s.dots === false ? 3 : 2)
+            .attr('stroke-width', (s.dots === false ? 3 : 2) + (s.emph ? 1.5 : 0))
             .attr('stroke-linejoin', 'round')
+            .attr('opacity', s.opacity ?? null)
             .attr('d', line);
         }
+        const dots = dotSeries[i] || [];
         svg.selectAll(`.dot-${i}`)
-          .data(seriesType === 'line' && s.dots === false ? [] : s.points).enter()
+          .data(dots).enter()
           .append('circle')
           .attr('class', `dot-${i}`)
-          .attr('cx', d => xScale(d.x)).attr('cy', d => yScale(d.y))
-          .attr('r', 4).attr('fill', color);
+          .attr('cx', p => p.x).attr('cy', p => p.py)
+          .attr('r', p => p.r).attr('fill', color).attr('opacity', s.opacity ?? null)
+          .attr('stroke', editorial && groundColor !== 'transparent' ? groundColor : null).attr('stroke-width', editorial ? 1 : null);
+        // Editorial: a line series is labelled at its end, in its own colour.
+        if (editorial && seriesType === 'line' && s.label && s.points.length > 1) {
+          const last = [...s.points].sort((a, b) => a.x - b.x).pop();
+          const lx = xScale(last.x), ly = yScale(last.y), w = textW(s.label, 13);
+          const b = placeLabel(w, 13, [[lx, ly + 20, 'end'], [lx - 8, ly - 10, 'end'], [lx, ly + 36, 'end'], [lx - 8, ly + 18, 'end']]);
+          halo(svg.append('text').attr('class', `line-label-${i}`).attr('opacity', s.opacity ?? null).attr('x', b.cx).attr('y', b.by).attr('text-anchor', b.anchor)
+            .attr('font-size', 13).attr('font-weight', 600).attr('fill', color).text(s.label));
+        }
         // Per-point label (e.g. "A", "P(3, 4)") — distinct from the series'
         // own `label` above (one free-text legend entry for the whole
         // series). Most points in a plain coordinate-geometry question have
         // no `label` at all (a single unnamed dot needs none) — `.filter()`
         // here, not a blanket `.data(s.points)`, keeps those un-labeled dots
         // from getting an empty-string <text> node.
-        svg.selectAll(`.dot-label-${i}`)
-          .data(s.points.filter(d => d.label)).enter()
-          .append('text')
-          .attr('class', `dot-label-${i}`)
-          .attr('x', d => xScale(d.x) + 8).attr('y', d => yScale(d.y) - 8)
-          .attr('font-size', 12).attr('font-weight', 700).attr('fill', textColor)
-          .text(d => d.label);
+        {
+          // The label goes clear of every dot, line and other label: a lone
+          // point's label sits up and right of it as before; a run's label over
+          // the run (its stacked neighbours). Editorial: in the dots' colour.
+          for (const p of dots.filter(q => q.d.label)) {
+            const run = dots.filter(q => q === p || (!q.d.label && Math.abs(q.x - p.x) < 70 && Math.abs(q.y - p.y) < 30));
+            const top = Math.min(...run.map(q => q.py - q.r)), bottom = Math.max(...run.map(q => q.py + q.r));
+            const left = Math.min(...run.map(q => q.x)), right = Math.max(...run.map(q => q.x));
+            const mid = (left + right) / 2, w = textW(p.d.label, 13);
+            const lone = run.length === 1 ? [[p.x + 8, p.py - 8, 'start']] : [];
+            const b = placeLabel(w, 13, [...lone, [mid, top - 8, 'middle'], [mid, top - 26, 'middle'], [right + 10, (top + bottom) / 2 + 5, 'start'],
+              [left - 10, (top + bottom) / 2 + 5, 'end'], [mid, bottom + 17, 'middle'], [mid, top - 44, 'middle']]);
+            halo(svg.append('text').attr('class', `dot-label-${i}`).attr('x', b.cx).attr('y', b.by).attr('text-anchor', b.anchor)
+              .attr('font-size', 13).attr('font-weight', editorial ? 600 : 700).attr('fill', editorial ? color : textColor).text(p.d.label));
+          }
+        }
       } else if (seriesType === 'bar') {
         const bw = innerW / s.points.length * 0.7;
         svg.selectAll(`.bar-${i}`)

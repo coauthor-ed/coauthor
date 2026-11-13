@@ -10,6 +10,7 @@ import {
   blockImageLayoutStyles, blockImageFocusStyles,
   renderBlockImage, renderBlockImageViewport, blockLayoutClass,
   probeImageDimensions, resolveImageLayout, resolveSimLayout,
+  measureRestTop, restTopChanged, sideRestExtra, fitSideImageAtRest,
 } from '../../../core/components/blockImageLayout.js';
 import { splitSteps } from '../../../core/markdown/splitSteps.js';
 import { remapRectForCover } from '../../../core/focusRect.js';
@@ -26,6 +27,8 @@ import { StoryTheatre } from '../../../core/components/diorama/StoryTheatre.js';
 import { theatreStyles } from '../../../core/components/diorama/theatreStyles.js';
 import { PHONE_STAGE_MIN_ASPECT } from '../../../core/components/diorama/theatreLayout.js';
 import { CUES, emitCue } from '../../../core/cues.js';
+import { parseFocusCue, focusAt } from '../../../core/narration/narrationModel.js';
+import { NarrationCover } from '../../../core/components/narrationCover.js';
 import { answerStageQueries } from '../../../core/components/stageAnswer.js';
 import { brandCopy } from '../../../ui/components/LookSlots.js';
 import { LookManager } from '../../../core/LookManager.js';
@@ -85,6 +88,8 @@ import { plainLookStyles } from './plainLook.js';
  *       "autoAdvanceMs": 6000,  // optional dwell, consulted only when autoplay is on
  *       "focus": { "<step id>": { x, y, w, h } },   // see blockImageLayout.js
  *       "focusSource": "derived",                   // "derived" | "author"
+ *       "focusMode": "camera",   // omit = spotlight (dim around the rect, light zoom);
+ *                                // "camera" = comic pan/zoom onto the rect, no dimming
  *       "images": { "<step id>": { src, alt?, caption? } }   // per-beat image swap
  *     }
  *
@@ -138,6 +143,9 @@ const CUE_MIN_DELAY_CAP_MS = 1200;
 // row + its smaller padding/margin) — the narrow-panel case this fallback
 // actually matters for is exactly the one compactControls also applies to.
 const SIM_CONTROLS_RESERVE_PX = 45;
+// Re-measures of the CONTROLS bar allowed per beat before the reserve settles
+// (see _measureSimControls()'s cycle guard). A real change needs one or two.
+const SIM_CONTROLS_MAX_PASSES = 6;
 
 export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosureMixin(LitElement))) {
   /** Lesson prose gets Classic's word-by-word beat entrance (the mixin's
@@ -332,7 +340,13 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
       .sim-host-container--cabinet #sim-canvas-host { border-width: 3px; border-radius: 12px; }
     }
 
-    .cb-sim-wrap .sim-host-container canvas {
+    /* Every canvas fills the stage width, except one a scene marks
+       data-sim-own-size (Q-57: a DOM/SVG scene's overlay canvas with its
+       own size; sim-lint canvas-size flags one that is not marked), or one
+       inside a DOM/SVG scene root with its own inline width or height (Q-86:
+       the scene sized it on purpose; a canvas scene's main canvas is not
+       inside .sim-dom-root, so it still fills the stage). */
+    .cb-sim-wrap .sim-host-container canvas:not([data-sim-own-size]):not(.sim-dom-root canvas[style*="width"], .sim-dom-root canvas[style*="height"]) {
       width: 100% !important;
       height: auto !important;
       display: block;
@@ -604,9 +618,22 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
     .story-quill-row.speaker-right { flex-direction: row-reverse; }
     .story-quill-row.speaker-right .story-quill-name { transform: rotate(2deg); background: var(--accent-teal); }
     .story-bubble.speaker-right::before { left: auto; right: 46px; }
+    /* Desktop: the speaker grows with the viewport (phone sizes unchanged). */
+    @media (min-width: 1024px) {
+      .story-quill > * { width: clamp(108px, min(10vw, 19dvh), 168px); }
+    }
+    /* Third-person narration in a course with a story cast: a comic caption
+       box, no speaker and no tail (the cast's characters only stand in the
+       row for the beats they speak). */
+    .story-bubble.story-caption {
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--accent-gold) 16%, var(--bubble-fill));
+    }
+    .story-bubble.story-caption::before { display: none; }
     @media (max-width: 700px) {
       .story-quill > * { width: 84px; }
       .story-bubble { padding: 16px 17px; border-radius: 18px; }
+      .story-bubble.story-caption { border-radius: 8px; }
     }
     @media (prefers-reduced-motion: reduce) {
       .story-quill > *, .story-bubble-inner.enter > * { animation: none; }
@@ -793,9 +820,29 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
     .rv-steps > .rv-step.rv-current::before {
       border-color: var(--primary-color);
       background: var(--primary-color);
-      box-shadow: 0 0 0 5px color-mix(in srgb, var(--primary-color) 22%, transparent);
+    }
+    /* The current dot's soft halo is a separate disc behind it (the beat
+       text's own ::before, same centre as the dot), pulsed with transform +
+       opacity only, so the pulse runs on the compositor: the old box-shadow
+       pulse repainted the slide 60 times a second on the main thread, for as
+       long as the learner read (Q-46: a still slide at 45 percent CPU on a
+       phone). Same look: halo 4 px at 22 percent swelling to 8 px at 10
+       percent; static 5 px at 22 percent where the pulse is off. The disc is
+       the dot's own colour, so where it overlaps the dot nothing changes. */
+    .rv-steps > .rv-step.rv-current > markdown-renderer::before {
+      content: '';
+      position: absolute;
+      left: -8px;
+      top: calc(0.45em - 8px);
+      width: 29px;
+      height: 29px;
+      border-radius: 50%;
+      background: color-mix(in srgb, var(--primary-color) 22%, transparent);
+      transform: scale(0.793);
+      pointer-events: none;
       animation: var(--beat-dot-anim, rv-dot-pulse 2.2s ease-in-out infinite);
     }
+    .rv-steps > .rv-step.rv-callout-result.rv-current > markdown-renderer::before { left: -42px; }
     .rv-steps > .rv-step > markdown-renderer {
       display: block;
       padding-left: 14px;
@@ -807,8 +854,8 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
     .rv-steps > .rv-step.rv-past { opacity: var(--reveal-past-opacity, 0.5); }
     .rv-steps > .rv-step.rv-past:hover { opacity: 0.85; }
     @keyframes rv-dot-pulse {
-      0%, 100% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary-color) 22%, transparent); }
-      50% { box-shadow: 0 0 0 8px color-mix(in srgb, var(--primary-color) 10%, transparent); }
+      0%, 100% { transform: scale(0.724); opacity: 1; }
+      50% { transform: scale(1); opacity: 0.455; }
     }
 
     /* ── "result" callout (STEP sentinel's callout="result") ───────────────
@@ -860,7 +907,7 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
        autoplay — see LessonEngine._canAutoplay(). */
     @media (prefers-reduced-motion: reduce) {
       .rv-step.rv-shown.rv-current { animation-name: rv-fade; }
-      .rv-steps > .rv-step.rv-current::before { animation: none; }
+      .rv-steps > .rv-step.rv-current > markdown-renderer::before { animation: none; }
       .rv-steps > .rv-step > markdown-renderer { transition: none; }
     }
 
@@ -908,9 +955,29 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
     :host([narrated]) .cb-layout-left > .cb-sim-wrap,
     :host([narrated]) .cb-layout-right > .cb-image-wrap,
     :host([narrated]) .cb-layout-left > .cb-image-wrap { margin-inline: auto; }
+    /* Q-90: the verdict chip of a POE recap, above the picture while narrated. */
+    .cb-narr-recap { margin: 0 auto 10px; max-width: 760px; }
+    .cb-narr-recap:empty { display: none; }
+    .cb-narr-recap .cb-poe-recap { margin: 0; }
     :host([narrated]) .th > .th-narr,
     :host([narrated]) .th > .th-div { display: none; }
     :host([narrated]) .th > .th-slot { flex: 1 1 auto; justify-content: flex-start; }
+    /* Visual focus (spec W1 D29n, _narrFocusAt): tagged scene parts fade in and
+       out of focus calmly (zero specificity: a scene's own transition on a
+       part wins, so its moves are never cut); data-narr-hide parts (a prompt line or legend that
+       repeats the narration) step aside while narrated. Text mode: none of it. */
+    :where(#sim-canvas-host[data-narr-mode] [data-narr]) { transition: filter 280ms ease-out, outline-color 200ms ease-out; }
+    #sim-canvas-host[data-narr-mode] [data-narr-hide] { visibility: hidden; }
+    /* A text slide read phrase by phrase: its beats keep their room, unseen. */
+    :host([narr-reading]) :is(.rv-step, .story-bubble) markdown-renderer { visibility: hidden; }
+    /* A figure's caption line (Fig. 1.2 ...) is never spoken: out of sight while playing. */
+    :host([narr-reading]) .cb-stage-caption { opacity: 0; }
+    /* Calm: captions under the picture and the scene's tool buttons step back
+       while the learner only listens; any touch or key brings them back. */
+    :host([narrated]) :is(.cb-stage-caption, .th-cap, .th-hb, .th-sep) { transition: opacity 420ms ease-out; }
+    :host([narr-calm]) :is(.cb-stage-caption, .th-cap, .th-hb, .th-sep) { opacity: 0; }
+    @media (prefers-reduced-motion: reduce) { :host([narrated]) :is(.cb-stage-caption, .th-cap, .th-hb, .th-sep) { transition: none; } }
+    @media (prefers-reduced-motion: reduce) { :where(#sim-canvas-host[data-narr-mode] [data-narr]) { transition: none; } }
     /* A portrait phone outside the theatre: a caption band above the picture. */
     @media (max-width: 600px) and (orientation: portrait) {
       :host([narrated]) [class*="cb-layout-"] > .cb-sim-wrap,
@@ -934,6 +1001,13 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
     // Narrated mode (NarrationPacer.js): the prose gives way to the lesson's
     // caption overlay wherever this slide has a picture to show instead.
     narrated: { type: Boolean, reflect: true },
+    // Narrated and only listening (spec W1 D29n; LessonEngine setNarrationCalm):
+    // the block's own furniture (figure captions, scene tool buttons) fades.
+    narrCalm: { type: Boolean, reflect: true, attribute: 'narr-calm' },
+    // Narrated, playing, one phrase at a time (spec W1 D29n; LessonEngine
+    // setNarrationReading): a text slide holds its prose back; the caption
+    // reads the phrase where the beat is.
+    narrReading: { type: Boolean, reflect: true, attribute: 'narr-reading' },
   };
 
   constructor() {
@@ -963,8 +1037,11 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
     this._simSceneClass = null;    // resolved by _probeActiveSimulation(), read by _mountSimulation()
     this._probedSimSrc = null;     // which src _simSceneClass currently reflects
     this._measuredControlsHeight = null; // see _measureSimControls()/_reserveControlsSpace()
-    this._priorControlsHeight = null;
+    this._ctlBeat = null;          // _measureSimControls()'s cycle guard: the beat + viewport it tracks,
+    this._ctlSeen = [];            // the last few reserves measured on it,
+    this._ctlPasses = 0;           // and how many re-measures it has had
     this._measuredStickyMediaHeight = null; // see _measureStickyMediaHeight()
+    this._restTop = null;                   // see _measureSideRestTop()
     this._stickyRO = null;                  // see _observeStickyMedia()
     this._stickyObserved = null;
 
@@ -1137,6 +1214,7 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
   }
 
   updated(changedProperties) {
+    if (this.narrated) queueMicrotask(() => this._narrFocusAt(this._narrFocusMs));
     this._markRenderers();
     super.updated(changedProperties); // ProgressiveDisclosureMixin's scroll-to-current-beat
     this._cueReveal();
@@ -1291,6 +1369,7 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
     // _measureSimControls() uses right above. Runs on every update; cheap
     // and a no-op unless the measured height actually changed.
     this._measureStickyMediaHeight();
+    this._measureSideRestTop();
 
     // A beat change may have swapped in a different `reveal.images` entry —
     // re-probe so resolveImageLayout() picks a layout for *this* image's
@@ -1392,7 +1471,15 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
     if (this._step !== this._steps.length - 1) return;
     const host = this.shadowRoot.getElementById('sim-canvas-host');
     const target = host?.querySelector('canvas, [tabindex], button, input, select, textarea, a[href]');
-    target?.focus({ preventScroll: true });
+    if (!target) return;
+    // A canvas reads its own keys, so it takes focus itself. A DOM scene
+    // gets focus on its host instead (tabindex -1, no ring): the next Tab
+    // lands on its first control, and no chip shows a focus ring that the
+    // learner never asked for (Q-84, les-03 s06 "The" chip).
+    if (target.localName === 'canvas') { target.focus({ preventScroll: true }); return; }
+    if (!host.hasAttribute('tabindex')) host.setAttribute('tabindex', '-1');
+    host.style.outline = 'none';
+    host.focus({ preventScroll: true });
   }
 
   async _mountSimulation(host) {
@@ -1477,6 +1564,7 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
 
       if (typeof this._scene.start === 'function') this._scene.start();
       if (typeof this._scene.resume === 'function') this._scene.resume();
+      if (this.narrated) this._narrFocusAt(this._narrFocusMs);
     } catch (err) {
       console.error('Failed to load simulation', err);
       // textContent, not innerHTML: the message is not ours to trust (invariant 6).
@@ -1721,7 +1809,7 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
   _resolveImageLayout() {
     const image = this._activeImage();
     if (!image?.src) return null;
-    return resolveImageLayout({
+    const result = resolveImageLayout({
       positionHint: image.position || 'right',
       naturalWidth: this._imgDims?.naturalWidth,
       naturalHeight: this._imgDims?.naturalHeight,
@@ -1729,6 +1817,7 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
       availableHeight: this._availableHeight(),
       isNarrow: this._isNarrowViewport || this._isShortLandscape,
     });
+    return this._fitSideImageAtRest(result);
   }
 
   /** Mirrors _resolveImageLayout() for the simulation case — see
@@ -1776,6 +1865,15 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
       // exactly, so a full-width game still reads as inset, not edge-to-edge.
       wideMaxWidthPx: simulation.fullWidth ? 1400 : undefined,
     });
+    // Q-57: on a phone a stacked scene takes the full column width. Fitted
+    // to the height budget, a tall (portrait) design came out 238-268 px
+    // wide at 390 px, too narrow to read or tap; the page scrolls instead,
+    // as it already does for a stacked panel's controls. Not the story
+    // fit-scene (narration and scene share the screen there by design).
+    if (this._isNarrowViewport && !this._fitPortrait && result
+      && (result.layout === 'above' || result.layout === 'below') && result.widthPx != null) {
+      return { ...result, widthPx: null };
+    }
     return this._reserveControlsSpace(result, aspect);
   }
 
@@ -1891,15 +1989,57 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
       const camH = cam?.clientHeight || 0;
       if (camH > 0) return Math.min(budget, camH);
     }
-    return budget - this._visibleControlsReserve();
+    return budget - this._visibleControlsReserve() - this._sideRestExtra();
+  }
+
+  /** How much lower than its sticky spot a side panel sits when the slide
+   *  opens (scrolled to the top: the progress bar and the gap above the row
+   *  push it down). _availableHeight() budgets for the STUCK panel (sticky top
+   *  = header + 12 px), so a panel sized to that budget ended about 50 px under
+   *  the action bar on a fresh slide (Q-55 LOW: econ L01-L05 at 1280x720),
+   *  and the learner had to scroll to see the scene's foot. Subtracting this
+   *  makes the panel fit as the slide opens. Scenes and (Q-57) side
+   *  images, never in the theatre or story mode. 0 until measured. */
+  _sideRestExtra() {
+    return sideRestExtra(this._restTop);
+  }
+
+  /** Measures _sideRestExtra()'s input: the side row's top in page
+   *  coordinates (where the panel sits at scroll 0). It depends only on what
+   *  is above the row, never on the panel's own size, so it cannot loop. */
+  _measureSideRestTop() {
+    const layout = this._activeImageLayout?.layout;
+    const side = layout === 'right' || layout === 'left';
+    const row = side && (this._data?.simulation?.src || this._activeImage()?.src) && !this.isStoryMode && !this._theatreOn
+      ? this.shadowRoot?.querySelector(`.cb-layout-${layout}`) : null;
+    const next = measureRestTop(row);
+    if (!restTopChanged(this._restTop, next)) return;
+    this._restTop = next;
+    this.requestUpdate();
+  }
+
+  /** Q-57: a side image is sized for the STUCK panel, like a side scene was
+   *  before Q-55, so on a fresh slide its foot (and caption) sat under the
+   *  action bar at 1280x720. Shrinks it by the rest offset (_sideRestExtra)
+   *  plus its caption, the way _reserveControlsSpace() does for scenes. The
+   *  tier never changes, only the width. */
+  _fitSideImageAtRest(result) {
+    return fitSideImageAtRest(result, {
+      naturalWidth: this._imgDims?.naturalWidth,
+      naturalHeight: this._imgDims?.naturalHeight,
+      captionEl: this.shadowRoot?.querySelector('.cb-image-wrap .cb-caption'),
+      restExtra: this._sideRestExtra(),
+      availableHeight: this._availableHeight(),
+    });
   }
 
   _reserveControlsSpace(result, aspect) {
     if (!result || (result.layout !== 'right' && result.layout !== 'left')) return result;
     if (result.widthPx == null) return result;
     const reserve = this._visibleControlsReserve();
-    if (!reserve) return result;
-    const overflow = (result.widthPx / aspect + reserve) - this._availableHeight();
+    const rest = this._sideRestExtra();
+    if (!reserve && !rest) return result;
+    const overflow = (result.widthPx / aspect + reserve + rest) - this._availableHeight();
     if (overflow <= 0) return result;
     return { ...result, widthPx: Math.max(0, result.widthPx - overflow * aspect) };
   }
@@ -1917,8 +2057,8 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
    *  or the bar wrapped/unwrapped between one and two rows) — cheap and
    *  self-limiting, not a layout loop: a re-render changes widthPx, which
    *  can change wrapping, which is exactly the case this needs to catch,
-   *  but wrapping only has two states, so this settles in at most one
-   *  extra pass. */
+   *  but a wrap cycle can have more than two states, so a cycle guard
+   *  (below) settles it within a few passes. */
   _measureSimControls() {
     const host = this.shadowRoot?.querySelector('.sim-host-container');
     const controls = this.shadowRoot?.querySelector('.cb-sim-controls');
@@ -1926,16 +2066,29 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
       ? Math.round(controls.getBoundingClientRect().bottom - host.getBoundingClientRect().bottom)
       : null;
     if (next === this._measuredControlsHeight) return;
-    // Flip-flop guard: the reserve narrows the panel, and narrowing can change
-    // whether the bar wraps, so a bar whose wrap threshold lies between the two
-    // widths measures A, then B, then A... forever (each re-render flips it).
-    // Seeing the value from two measurements ago again means exactly that:
-    // settle on the larger (wrapped) reserve, which cannot overflow.
-    if (next != null && this._measuredControlsHeight != null && next === this._priorControlsHeight) {
-      next = Math.max(next, this._measuredControlsHeight);
+    // Cycle guard: the reserve narrows the panel, and narrowing can change
+    // how the bar wraps, so a bar whose wrap thresholds lie between the widths
+    // measures A, then B, then A... forever (each re-render flips it). The
+    // cycle is not always two values: a bar with a tall segmented control
+    // cycled through three (129 / 134 / 161 px, Q-55) and froze the tab.
+    // So: remember the last few values on this beat; a value seen again, or
+    // too many re-measures on one beat, means a cycle. Settle on the largest
+    // reserve seen (the most wrapped bar), which cannot overflow. Settling
+    // only ever grows the reserve, so this always ends.
+    const beatKey = `${this._step}|${window.innerWidth}x${window.innerHeight}`;   // a new beat or a resize starts afresh
+    if (this._ctlBeat !== beatKey) {
+      this._ctlBeat = beatKey;
+      this._ctlSeen = [];
+      this._ctlPasses = 0;
+    }
+    const seen = this._ctlSeen;
+    if (next != null && this._measuredControlsHeight != null
+      && (seen.includes(next) || ++this._ctlPasses > SIM_CONTROLS_MAX_PASSES)) {
+      next = Math.max(next, this._measuredControlsHeight, ...seen.filter((v) => v != null));
       if (next === this._measuredControlsHeight) return;
     }
-    this._priorControlsHeight = next == null ? null : this._measuredControlsHeight;
+    seen.push(this._measuredControlsHeight);
+    if (seen.length > 4) seen.shift();
     this._measuredControlsHeight = next;
     if (this._activeImageLayout?.layout === 'right' || this._activeImageLayout?.layout === 'left') {
       this.requestUpdate();
@@ -2014,20 +2167,28 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
     (this._cueTimers || []).forEach(clearTimeout);
     this._cueTimers = [];
     this._firedCueIds = new Set();
+    // A text-mode figure cue from the last beat ends with that beat: the new
+    // beat starts on its own focus (Q-86).
+    if (this._textFigCued) { this._textFigCued = false; this._figFieldHandle?.cueFocus?.(null); }
     // Narrated, the narration's own word times fire the cues (fireCue below).
     if (this.narrated) return;
     const stepEl = this.shadowRoot?.querySelector('.rv-step.rv-current markdown-renderer');
-    if (!stepEl || !this._scene) return;
+    if (!stepEl || (!this._scene && !this._data?.figure)) return;
     await stepEl.whenRendered();
     const anchors = [...(stepEl.shadowRoot?.querySelectorAll('.cb-cue-anchor') || [])];
     if (!anchors.length) return;
 
     const container = stepEl.shadowRoot.getElementById('content-container');
+    // With no scene, a cue naming a part of the figure focuses it, as the
+    // narration's cue does (Q-86: text mode used to drive scenes only).
     const fire = (anchor) => {
       const id = anchor.dataset.cueId;
       if (this._firedCueIds.has(id)) return;
       this._firedCueIds.add(id);
-      this._scene.onCue?.(id);
+      if (this._scene) { this._scene.onCue?.(id); return; }
+      if (this.narrated || this._figFieldHandle?.resolveCue?.(id) == null) return;
+      this._textFigCued = true;
+      this._figureCue(id);
     };
 
     // Hybrid: whichever happens first — real scroll-reveal, or a capped
@@ -2058,6 +2219,7 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
     if (on === this.narrated) return;
     this.narrated = on;
     this._theatre.narrated = on;
+    if (!on) { this._narrFocusSeg = null; this._narrFocusAt(0); this.narrCalm = false; this.narrReading = false; }
     // Text mode re-arms this beat's CUE anchors; narrated mode drops them.
     // Cues already fired this beat stay fired, so nothing plays twice.
     const fired = this._firedCueIds;
@@ -2081,9 +2243,25 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
     if (dy < 0) window.scrollBy({ top: dy, behavior: 'instant' });
   }
 
-  /** A narration cue: the scene's onCue(id), once per beat (shared with CUE anchors). */
+  /** Calm on or off (opacity only, nothing moves). */
+  setNarrationCalm(on) { this.narrCalm = !!on && !!this.narrated; }
+
+  /** One phrase at a time on a text slide (visibility only, nothing moves). */
+  setNarrationReading(on) { this.narrReading = !!on && !!this.narrated; }
+
+  /** A narration cue: the scene's onCue(id), once per beat (shared with CUE anchors).
+   *  With no scene, a cue naming a part of the `figure` field focuses it
+   *  (focus.<id>, focus.none, or a bare item id; FigureLayouts figureCueFocus). */
   fireCue(id) {
-    if (!id || !this._scene) return;
+    if (!id) return;
+    // Visual focus cues (focus.<id>, show.<id>; spec W1 D29n): the engine's
+    // own focus contract, derived from the beat time (_narrFocusAt). A scene
+    // still hears them through onCue below, to opt in with its own drawing.
+    if (parseFocusCue(id)) {
+      const c = (this._narrFocusSeg?.cues || []).find((x) => x.id === id);
+      this._narrFocusAt(Math.max(this._narrFocusMs || 0, c && Number.isFinite(c.t) ? c.t : 0));
+    } else if (!this._scene) { this._figureCue(id); return; }
+    if (!this._scene) return;
     if (!this._firedCueIds) this._firedCueIds = new Set();
     if (this._firedCueIds.has(id)) return;
     this._firedCueIds.add(id);
@@ -2096,6 +2274,13 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
    * hidden behind a picture. seg null clears it.
    */
   narrationWord(seg, wi) {
+    // The beat's segment (default voice: cue times share the scene clock).
+    const fseg = seg ? (seg.defaultSeg || seg) : null;
+    if (fseg !== this._narrFocusSeg) {
+      this._narrFocusSeg = fseg;
+      this._narrFocusMs = 0;
+      this._narrFocusAt(0);
+    }
     const cur = this._narrProse();
     if (this._narrWordEl && this._narrWordEl !== cur) this._narrWordEl.narrationWord?.(null, -1);
     this._narrWordEl = cur || null;
@@ -2109,8 +2294,170 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
 
   /** Beat time for a time-pure scene: static SEEKABLE + seek(beat, ms). */
   narrationSeek(beat, ms) {
+    this._narrFocusAt(ms);
     const sc = this._scene;
     if (sc?.constructor?.SEEKABLE && typeof sc.seek === 'function') sc.seek(beat, ms);
+    if (!sc) this._figureSeek(beat, ms);
+  }
+
+  /** Figure cue focus, logged with the beat time it came at (the last seek
+   *  time seen), so a replay or scrub re-derives it: same scheme as the
+   *  course helper NarrationCues.js uses for scenes. */
+  _figureCue(id) {
+    const h = this._figFieldHandle;
+    const ids = h?.resolveCue?.(id);
+    if (ids == null) return;
+    const nc = this._figCues || (this._figCues = { beat: -1, log: [], lastMs: 0 });
+    if (!nc.log.some((c) => c.id === id)) nc.log.push({ id, ms: nc.lastMs });
+    h.cueFocus(ids);
+  }
+
+  /** Beat time for the figure's cue focus: a new beat clears it; any time
+   *  shows the last logged cue at or before it (none: the beat's own focus). */
+  _figureSeek(beat, ms) {
+    const h = this._figFieldHandle;
+    if (!h?.cueFocus) return;
+    const t = Number.isFinite(ms) ? ms : 0;
+    const nc = this._figCues || (this._figCues = { beat: -1, log: [], lastMs: 0 });
+    if (beat !== nc.beat) { nc.beat = beat; nc.log = []; nc.lastMs = t; h.cueFocus(null); return; }
+    nc.lastMs = t;
+    let ids = null;
+    for (const c of nc.log) if (c.ms <= t) ids = h.resolveCue(c.id);
+    h.cueFocus(ids);
+  }
+
+  /**
+   * The visual focus contract (spec W1 D29n; narration.md sec 8): at beat
+   * time ms, the beat's focus cues give the parts lit (`on`) and the parts
+   * still held back (`held`, from show.<id> cues not reached yet). Applied
+   * to every picture on the slide without scene code:
+   *   - a scene's DOM parts tagged data-narr="<id> [<id>...]": held parts are
+   *     hidden (their room kept, so nothing moves), lit parts get the focus
+   *     ring, every other tagged part dims; data-narr-hide parts (a scene's
+   *     own prompt line or legend that repeats the narration) are hidden
+   *     while narrated;
+   *   - a scene's optional narrationFocus({ narrated, on, held }) (a canvas
+   *     scene draws its own focus);
+   *   - the figure field (engine figures and renderers): handle.narrationFocus.
+   * Only while narrated; text mode never sees any of it.
+   */
+  _narrFocusAt(ms) {
+    const t = Number.isFinite(ms) ? ms : 0;
+    this._narrFocusMs = t;
+    this._narrCoverAt(t);
+    const seg = this.narrated ? this._narrFocusSeg : null;
+    const f = seg ? focusAt(seg.cues, t) : { on: [], held: [], any: false, rest: false };
+    // At rest (focus cues to come, none yet) a sentinel id nobody tags is lit,
+    // so every tagged part, figure item and series dims through the same path.
+    const state = { narrated: !!this.narrated, on: f.rest ? ['narr-rest'] : f.on, held: f.held };
+    const key = JSON.stringify(state);
+    const host = this.shadowRoot?.getElementById('sim-canvas-host');
+    // Re-applied when the state changes or a picture was (re)mounted since.
+    const targets = [host, this._scene, this._figFieldHandle, this._figureHandle];
+    const same = this._narrFocusTargets?.every((x, i) => x === targets[i]);
+    if (key === this._narrFocusKey && same) return;
+    this._narrFocusKey = key;
+    this._narrFocusTargets = targets;
+    if (host) {
+      host.toggleAttribute('data-narr-mode', state.narrated);
+      host.toggleAttribute('data-narr-focus', state.narrated && state.on.length > 0);
+    }
+    this._narrFocusCss(state);
+    try { this._scene?.narrationFocus?.(state); } catch (e) { console.error('narrationFocus', e); }
+    try { this._figFieldHandle?.narrationFocus?.(state); } catch (e) { console.error('figure narrationFocus', e); }
+    try { this._figureHandle?.narrationFocus?.(state); } catch (e) { console.error('graph narrationFocus', e); }
+    // The lit part must be on screen: a tall scene on a phone, or a figure
+    // item below the fold, is brought into view when the light moves to it.
+    const litKey = state.narrated ? state.on.join('+') : '';
+    // Measured after the scene has redrawn for the same cue (its onCue runs
+    // in the same tick and may repaint on the next frame or two).
+    if (litKey && litKey !== 'narr-rest' && litKey !== this._narrLitKey) setTimeout(() => this._narrScrollToLit(state.on), 120);
+    this._narrLitKey = litKey;
+  }
+
+  /**
+   * Optional `narrationCover` (Q-90, narrationCover.js): `{ "<step>": spec }`,
+   * keyed by the narration step id ("b1"). Narrated only: an opening picture
+   * over the scene's host, moved by the beat's cues, faded at `until` so the
+   * scene (mounted and cued underneath all along) takes over. Time-pure.
+   */
+  _narrCoverAt(ms) {
+    const seg = this.narrated ? this._narrFocusSeg : null;
+    const spec = seg?.step ? this._data?.narrationCover?.[seg.step] : null;
+    const host = spec ? this.shadowRoot?.getElementById('sim-canvas-host') : null;
+    if (!spec || !host) {
+      if (this._cover) { this._cover.remove(); this._cover = null; }
+      return;
+    }
+    const c = this._cover;
+    if (!c || c.spec !== spec || c.parent !== host || !c.el?.isConnected) {
+      c?.remove();
+      this._cover = new NarrationCover(host, spec, this._ctx?.bundleId);
+    }
+    this._cover.update(ms, seg.cues);
+  }
+
+  _narrScrollToLit(on) {
+    const root = this.shadowRoot;
+    if (!root || !this.narrated) return;
+    const ids = on.map((i) => CSS.escape(i));
+    const host = root.getElementById('sim-canvas-host');
+    let el = host?.querySelector(ids.map((i) => `[data-narr~="${i}"]`).join(','));
+    if (!el) {
+      const fr = root.getElementById('figure-field-host')?.shadowRoot;
+      el = fr?.querySelector(ids.map((i) => `[data-id="${i}"]`).join(','));
+    }
+    if (!el) return;
+    let r = el.getBoundingClientRect();
+    if (!r.height) return;
+    const vh = window.innerHeight;
+    const smooth = !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    // Q-85: a portrait phone outside the theatre has its caption band ABOVE
+    // the picture, so the lit part only needs to clear the bar: scroll the
+    // least that shows it. Centring it scrolled the page to its end, and the
+    // caption, finding no room above the picture, sat over the scene's top.
+    if (!this._theatreOn && window.matchMedia?.('(max-width: 600px) and (orientation: portrait)').matches) {
+      const cs = getComputedStyle(document.documentElement);
+      const top = (parseFloat(cs.getPropertyValue('--lesson-sticky-header-h')) || 0) + 8;
+      const bottom = vh - (parseFloat(cs.getPropertyValue('--lesson-chrome-bottom')) || 0) - 12;
+      // Every part lit by the cue (a row and its note line), not just the first.
+      const all = [...el.getRootNode().querySelectorAll(ids.map((i) => `[data-narr~="${i}"]`).join(','))]
+        .map((e) => e.getBoundingClientRect()).filter((q) => q.height > 0);
+      if (all.length > 1) r = { top: Math.min(...all.map((q) => q.top)), bottom: Math.max(...all.map((q) => q.bottom)) };
+      r.height = r.bottom - r.top;
+      if (r.top >= top && r.bottom <= bottom) return;
+      const dy = r.bottom > bottom && r.height <= bottom - top ? r.bottom - bottom : r.top - top - 84;
+      window.scrollBy({ top: dy, behavior: smooth ? 'smooth' : 'auto' });
+      return;
+    }
+    // The bottom fifth of the view belongs to the caption and the strip.
+    if (r.top >= 56 && r.bottom <= vh * 0.8) return;
+    // A part taller than most of the view keeps its top in sight.
+    el.scrollIntoView({ block: r.height > vh * 0.55 ? 'start' : 'center', behavior: smooth ? 'smooth' : 'auto' });
+  }
+
+  /** The per-beat rules for tagged scene parts: one style element, rewritten,
+   *  so a scene that redraws its DOM keeps the focus with no extra call. */
+  _narrFocusCss({ narrated, on, held }) {
+    const root = this.shadowRoot;
+    if (!root) return;
+    let el = root.getElementById('narr-focus-dyn');
+    if (!el) { el = document.createElement('style'); el.id = 'narr-focus-dyn'; root.appendChild(el); }
+    if (!narrated || (!on.length && !held.length)) { el.textContent = ''; return; }
+    const sel = (ids) => ids.map((i) => `[data-narr~="${CSS.escape(i)}"]`).join(',');
+    const H = '#sim-canvas-host[data-narr-mode]';
+    let css = '';
+    if (held.length) css += `${H} :is(${sel(held)}) { opacity: 0 !important; visibility: hidden !important; pointer-events: none !important; }\n`;
+    if (on.length) {
+      const lit = sel(on);
+      // Dim by filter, not opacity: it multiplies with the scene's own opacity,
+      // so a part the scene has faded out stays out. A part holding or held by a
+      // lit part is not dimmed (tags should not nest otherwise).
+      css += `${H}[data-narr-focus] [data-narr]:not(:is(${lit})):not(:is(${lit}) *):not(:has(:is(${lit}))) { filter: opacity(var(--narr-dim, 0.26)); }\n`;
+      css += `${H}[data-narr-focus] :is(${lit}):not(svg *) { outline: 2px solid var(--sim-annot); outline-offset: 3px; border-radius: 4px; }\n`;
+      css += `${H}[data-narr-focus] svg :is(${lit}) { filter: drop-shadow(0 0 1.5px var(--sim-annot)) drop-shadow(0 0 5px var(--sim-annot)); }\n`;
+    }
+    el.textContent = css;
   }
 
   /** The scene's own getState(), for LessonEngine to hand back on remount. */
@@ -2156,8 +2503,14 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
     }
     const media = rect(root?.querySelector('.cb-image-wrap, .cb-sim-wrap'));
     if (media) return { kind: 'media', stage: media, area: rect(this), free: null, proseHidden: true };
-    // A scripted beat says something other than the prose: caption, off the current beat.
     const prose = this._narrProse();
+    // Phrase by phrase (spec W1 D29n): the prose is held back (CSS on
+    // :host([narr-reading])) and the caption reads in the current beat's place.
+    if (this.narrReading && prose) {
+      const beat = prose.closest('.rv-step, .story-bubble') || prose;
+      return { kind: 'text', stage: rect(beat) || rect(this), area: rect(this), free: null, proseHidden: true, inPlace: false, reading: true };
+    }
+    // A scripted beat says something other than the prose: caption, off the current beat.
     if (seg && prose?.narrationReadsProse && !prose.narrationReadsProse(seg)) {
       const beat = prose.closest('.rv-step, .story-bubble') || prose;
       return { kind: 'text', stage: rect(beat) || rect(this), area: rect(this), free: null, proseHidden: false, inPlace: false };
@@ -2313,12 +2666,16 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
     const past = this._steps.slice(0, this._step);
     const narrator = brandCopy('narrator');
     const speaker = this._storySpeaker(cur?.md);
+    // A course with a story cast: a beat no character opens is the story's
+    // own narration, told in a caption box with nobody standing over it
+    // (never the cast narrator, who would seem to say "Ajji strikes a match").
+    const caption = !speaker && !!LookManager.cast();
     const side = speaker?.side === 'right' ? 'speaker-right' : '';
     return html`
       ${this._header
         ? html`<markdown-renderer class="cb-header story-title" .content=${this._header} .mathColors=${mathColors} .glossaryBundle=${bundle}></markdown-renderer>`
         : ''}
-      ${speaker ? html`
+      ${caption ? '' : speaker ? html`
         <div class="story-quill-row ${side}">
           <span class="story-quill" aria-hidden="true">${speaker.el}</span>
           <span class="story-quill-name">${speaker.label}</span>
@@ -2329,7 +2686,7 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
           ${narrator ? html`<span class="story-quill-name">${narrator}</span>` : ''}
         </div>
       `}
-      <div class="story-bubble rv-current ${side} ${cur?.callout ? `story-callout-${cur.callout}` : ''}" data-step-id=${cur?.id ?? ''}>
+      <div class="story-bubble rv-current ${side} ${caption ? 'story-caption' : ''} ${cur?.callout ? `story-callout-${cur.callout}` : ''}" data-step-id=${cur?.id ?? ''}>
         <div class="story-bubble-inner">
           ${this._data?.poeRecapStep === this._step ? this._renderPoeRecap(true) : ''}
           ${cur ? html`<markdown-renderer .content=${speaker ? speaker.md : cur.md} .mathColors=${mathColors} .glossaryBundle=${bundle}></markdown-renderer>` : ''}
@@ -2396,6 +2753,8 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
     // If the author tied this recap to a specific beat, and we are calling this
     // from the top level (render()), don't render it here.
     if (!fromStep && typeof this._data.poeRecapStep === 'number') return html``;
+    // narrated: render() puts it above the content instead (Q-90)
+    if (!fromStep && this._recapInBody === false) return html``;
     
     const payload = this._ctx?.poe?.recall(this._ctx.blockIndex);
     if (!payload) return html``;
@@ -2613,7 +2972,8 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
 
   _renderImage(image) {
     const { capped = false, zoomAffordance = false, widthPx = null } = this._activeImageLayout || {};
-    const opts = { capped, zoomAffordance, widthPx, pop: this._data.mediaStep > 0, bundleId: this._ctx?.bundleId };
+    const camera = this._data?.reveal?.focusMode === 'camera';
+    const opts = { capped, zoomAffordance, widthPx, pop: this._data.mediaStep > 0, bundleId: this._ctx?.bundleId, camera };
     const focusMap = this._data?.reveal?.focus;
     if (!focusMap) return renderBlockImage(image, opts);
     const id = this._steps[this._step]?.id;
@@ -2644,6 +3004,18 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
   }
 
   render() {
+    // Narrated (Q-90): a media slide hides its text pane, and the POE
+    // verdict ("You predicted ...") lived only there. Narrated, it renders
+    // once, above the slide's content, for the whole slide (every layout).
+    const top = !!this.narrated && !!this._data?.poeRole;
+    this._recapInBody = !top;
+    const body = this._renderBody();
+    this._recapInBody = true;
+    if (!top) return body;
+    return html`<div class="cb-narr-recap">${this._renderPoeRecap()}</div>${body}`;
+  }
+
+  _renderBody() {
     this._theatreOn = false;
     if (!this._data) return html``;
 
@@ -2695,11 +3067,16 @@ export class ContentBlock extends LookMixin(LessonModeMixin(ProgressiveDisclosur
     // stacks it through the usual CSS. Caption through the same path as a
     // simulation's (plain: "Fig. L.S").
     if (figField) {
+      // Narrated (Q-84): the prose column is hidden, so a side figure takes the
+      // stacked width instead (up to 940 px): wider, it reflows shorter (more
+      // columns) and leaves the caption band under it free.
+      const figPos0 = figField.position || 'right';
+      const figPos = this.narrated && !this._isNarrowViewport && (figPos0 === 'right' || figPos0 === 'left') ? 'below' : figPos0;
       this._activeImageLayout = resolveSimLayout({
-        positionHint: figField.position || 'right', aspect: figField.renderer ? this._figFieldRendererAspect(figField) : figureAspect(figField), columnWidth: this._columnWidth,
+        positionHint: figPos, aspect: figField.renderer ? this._figFieldRendererAspect(figField) : figureAspect(figField), columnWidth: this._columnWidth,
         availableHeight: Infinity, isNarrow: this._isNarrowViewport, isPortrait: this._isPortrait, wideMaxWidthPx: 940,
       });
-      const cls = this._activeImageLayout ? `cb-layout-${this._activeImageLayout.layout}` : `cb-layout-${figField.position || 'right'}`;
+      const cls = this._activeImageLayout ? `cb-layout-${this._activeImageLayout.layout}` : `cb-layout-${figPos}`;
       const isFlowF = this._activeImageLayout?.layout === 'flow';
       const { widthPx = null } = this._activeImageLayout || {};
       const cap = this._captionHtml(figField.caption);

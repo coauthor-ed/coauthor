@@ -1,4 +1,4 @@
-import { drawFigure, describeFigure, FIGURE_CSS } from './FigureLayouts.js';
+import { drawFigure, describeFigure, figureFocus, figureCueFocus, applyFigureFocus, FIGURE_CSS } from './FigureLayouts.js';
 import { SimulationLoader } from '../SimulationLoader.js';
 
 /**
@@ -27,7 +27,8 @@ import { SimulationLoader } from '../SimulationLoader.js';
  * @param {HTMLElement} hostEl empty element to mount into
  * @param {object} figure the `figure` field
  * @param {{ step?: number, look?: string, bundleId?: string|null, kicker?: string }} opts
- * @returns {{ setStep(step: number): void, setOptions(o: { look?: string, kicker?: string }): void, destroy(): void }}
+ * @returns {{ setStep(step: number): void, setOptions(o: { look?: string, kicker?: string }): void,
+ *   resolveCue(id: string): string[]|null, cueFocus(ids: string[]|null): void, destroy(): void }}
  */
 export function mountFigure(hostEl, figure, opts = {}) {
   const root = hostEl.shadowRoot || hostEl.attachShadow({ mode: 'open' });
@@ -60,13 +61,44 @@ export function mountFigure(hostEl, figure, opts = {}) {
     wrap.dataset.look = look === 'plain' ? 'plain' : 'quill';
     if (look === 'plain' && setting === 'casefile') wrap.dataset.setting = 'casefile';
     else delete wrap.dataset.setting;
-    fig.dataset.tab = String(figure.tab?.en ?? figure.tab ?? '') || kicker;
+    // Plain draws the folder tab only when the author wrote one: the lesson
+    // kicker is already in the page head.
+    const tab = String(figure.tab?.en ?? figure.tab ?? '');
+    fig.dataset.tab = tab || (look === 'plain' ? '' : kicker);
+  };
+  // Focus (FigureLayouts figureFocus): the beat's own, or a narration cue's
+  // until the next beat. On a beat change the new body is drawn with the old
+  // focus first, then moved to the new one, so the change transitions.
+  let cueIds = null;
+  let narr = { narrated: false, on: [], held: [] }; // narration focus contract (spec W1 D29n)
+  let shownIds = [];
+  let focusRaf = 0;
+  // A part still held for its show cue is never the focus (nothing to light yet).
+  const notHeld = (ids) => (narr.narrated && narr.held.length ? ids.filter((i) => !narr.held.includes(i)) : ids);
+  const focusNow = () => notHeld(cueIds ?? (narr.narrated && narr.on.length ? narr.on : null) ?? figureFocus(figure, step + 1));
+  // Parts a show.<id> cue has not reached yet: hidden, their room kept.
+  const applyHeld = () => {
+    const held = new Set(narr.narrated ? narr.held : []);
+    body.querySelectorAll('[data-id]').forEach((e) => {
+      const host = e.classList.contains('tl-track') ? e.parentNode : e;
+      host.classList.toggle('narr-held', held.has(e.dataset.id));
+    });
+    if (narr.narrated) wrap.dataset.narrated = ''; else delete wrap.dataset.narrated;
+  };
+  const setFocus = (ids, smooth) => {
+    cancelAnimationFrame(focusRaf);
+    if (!smooth) { applyFigureFocus(wrap, body, ids); shownIds = ids; return; }
+    applyFigureFocus(wrap, body, shownIds);
+    body.getBoundingClientRect(); // style the old focus first, so the change transitions
+    focusRaf = requestAnimationFrame(() => { if (!dead) { applyFigureFocus(wrap, body, ids); shownIds = ids; } });
   };
   const draw = (animate) => {
     if (dead) return;
     apply();
     lastW = body.clientWidth;
-    drawFigure({ body, inner, lane }, figure, { cur: step + 1, animate });
+    drawFigure({ body, inner, lane }, figure, { cur: step + 1, animate, look: look === 'plain' ? 'plain' : 'quill' });
+    setFocus(focusNow(), animate);
+    applyHeld();
     const label = (typeof figure.a11yCaption === 'string' && figure.a11yCaption.trim()) || figure.a11yCaption?.en || describeFigure(figure, step + 1);
     hostEl.setAttribute('role', 'img');
     hostEl.setAttribute('aria-label', label);
@@ -92,7 +124,25 @@ export function mountFigure(hostEl, figure, opts = {}) {
       if (s === step) return;
       const forward = s > step;
       step = s;
+      cueIds = null;
       draw(forward);
+    },
+    /** A narration cue id as focus (figureCueFocus): the id list, or null when it is not this figure's. */
+    resolveCue(id) { return figureCueFocus(figure, id); },
+    /** Cue focus until the next beat; null goes back to the beat's own focus. */
+    cueFocus(ids) {
+      const next = ids == null ? null : [...ids];
+      if (JSON.stringify(next) === JSON.stringify(cueIds)) return;
+      cueIds = next;
+      setFocus(focusNow(), false);
+    },
+    /** Narration focus at the beat time (content-block _narrFocusAt):
+     *  { narrated, on: lit ids, held: ids still hidden }. Bare-id cues
+     *  (cueFocus) win over it; the beat's own focus applies when on is empty. */
+    narrationFocus(st = {}) {
+      narr = { narrated: !!st.narrated, on: [...(st.on || [])], held: [...(st.held || [])] };
+      applyHeld();
+      setFocus(focusNow(), false);
     },
     setOptions(o = {}) {
       const nl = o.look ?? look, nk = o.kicker ?? kicker;
@@ -102,6 +152,7 @@ export function mountFigure(hostEl, figure, opts = {}) {
     },
     destroy() {
       dead = true;
+      cancelAnimationFrame(focusRaf);
       ro?.disconnect();
     },
   };

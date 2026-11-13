@@ -1,3 +1,4 @@
+import { loadMathlive } from 'core/mathliveConfig.js';
 import { LitElement, html, css } from 'lit';
 import { EventBus } from '../../../../core/EventBus.js';
 import '../../../../ui/components/MarkdownRenderer.js';
@@ -111,7 +112,7 @@ export class EquationInputPlugin extends LitElement {
     // Lazy-load heavy vendors only when this plugin is actually mounted
     const [{ ComputeEngine }] = await Promise.all([
       import('vendor/compute-engine.js'),
-      import('vendor/mathlive.js'),
+      loadMathlive(),
     ]);
     this._ce = new ComputeEngine();
   }

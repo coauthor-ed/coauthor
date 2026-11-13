@@ -117,9 +117,23 @@ export class PoeObserveSimPlugin extends LitElement {
       width: auto;
       max-width: 100%;
       height: auto;
-      max-height: min(50vh, 460px);
+      max-height: var(--obs-scene-max-h);
       display: block;
       margin: 0 auto;
+    }
+    /* Q-60: the scene's height budget. Was min(50vh, 460px), which left the
+       card running under the action bar at 1280x720: now the viewport below
+       the sticky head and above the bar, less the card's own chrome
+       (--obs-chrome, measured in _measureChrome()), so the whole card fits
+       once scrolled to; never above 460 px or below 200 px. A phone has no
+       height cap: the scene takes the full column and the page scrolls, as
+       content-block scenes do since Q-57. */
+    :host {
+      --obs-scene-max-h: min(460px, max(200px, 100vh - var(--lesson-sticky-header-h, 0px) - var(--lesson-chrome-bottom, 0px) - var(--obs-chrome, 50vh)));
+    }
+    @media (max-width: 600px) {
+      :host { --obs-scene-max-h: none; }
+      .sim-wrap canvas { width: 100%; }
     }
 
     /* DomSimulation scenes (src/simulations/base/DomSimulation.js) build real
@@ -136,8 +150,11 @@ export class PoeObserveSimPlugin extends LitElement {
       /* Cap the WIDTH from the height budget (DomSimulation publishes the
          design aspect as --sim-aspect) so the scene scales down to fit. A
          max-height here cropped it instead: the scene is scaled by width. */
-      max-width: min(100%, calc(min(50vh, 460px) * var(--sim-aspect, 1000)));
+      max-width: min(100%, calc(var(--obs-scene-max-h) * var(--sim-aspect, 1000)));
       margin: 0 auto;
+    }
+    @media (max-width: 600px) {
+      .sim-wrap .sim-dom-scale-wrap { max-width: 100%; }
     }
 
     .recap {
@@ -188,6 +205,8 @@ export class PoeObserveSimPlugin extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    this._chromeRO?.disconnect();
+    this._chromeRO = null;
     EventBus.off('poe:prediction-submitted', this._handlePrediction);
     this._stopStageAnswers?.();
     if (this._scene) this._scene.destroy();
@@ -202,7 +221,25 @@ export class PoeObserveSimPlugin extends LitElement {
     }
   }
 
+  /** Q-60: --obs-chrome = the card's height that is not the scene (head,
+   *  instructions, controls, recap) + the sticky gap and some air. It does
+   *  not depend on the scene's size, so resizing the scene cannot loop. */
+  _measureChrome() {
+    const card = this.shadowRoot?.querySelector('.card');
+    const wrap = this.shadowRoot?.querySelector('.sim-wrap');
+    if (!card || !wrap) return;
+    const next = Math.round(card.offsetHeight - wrap.offsetHeight + 24);
+    if (Math.abs(next - (this._chrome || 0)) < 3) return;
+    this._chrome = next;
+    this.style.setProperty('--obs-chrome', `${next}px`);
+  }
+
   async firstUpdated() {
+    const card = this.shadowRoot.querySelector('.card');
+    if (card && typeof ResizeObserver !== 'undefined') {
+      this._chromeRO = new ResizeObserver(() => this._measureChrome());
+      this._chromeRO.observe(card);
+    }
     const host = this.shadowRoot.getElementById('sim-canvas-host');
     if (!host) return;
 

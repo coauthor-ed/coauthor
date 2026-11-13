@@ -860,7 +860,7 @@ export class QuillMathCoach extends LessonModeMixin(LitElement) {
         </div>
         <div class="bird ${this._lean ? 'lean' : ''} ${this._chip ? 'askable' : ''}"
           title=${this._chip ? 'Tap Quill for a clue' : ''} @click=${() => this._chip && this._requestHint()}>
-          <quill-mascot size="sm" expression="happy" ?idle=${this._visible}></quill-mascot>
+          <quill-mascot size="sm" expression="happy" ?idle=${this._visible} .dormant=${!this._visible}></quill-mascot>
           ${this._chip && !this._idea ? html`<span class="ask" aria-hidden="true">?</span>` : ''}
           ${this._idea ? html`
             <div class="idea" aria-hidden="true">

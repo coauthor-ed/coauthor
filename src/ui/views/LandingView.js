@@ -15,7 +15,7 @@ import { landingStyles } from './landing/landingStyles.js';
 import { landingStylesMore } from './landing/landingStylesMore.js';
 import { landingStylesDescriptive } from './landing/landingStylesDescriptive.js';
 import { stopDescriptive, replaySheet } from './landing/landingDescriptive.js';
-import { HeroQuill } from './landing/heroQuill.js';
+import { HeroQuill, SKY_REST_MS } from './landing/heroQuill.js';
 import { doorways, commonsAndPrivate, guidesLibrary, shelf, footer } from './landing/landingMore.js';
 import {
   ROUTE_STARS, DAWN_STARS, sparkle, heroSkyFar, heroPlanets, heroBergs, iceLedge,
@@ -625,7 +625,7 @@ export class LandingView extends LitElement {
             <span class="pole" aria-hidden="true"></span>
           </nav>
           <div class="q-stand">
-            <button class="quill-btn" aria-label="Quill the penguin. Tap him for a trick." @click=${this._tapQuill}><span class="q-body"><span class="q-breath amb"><quill-mascot size="hero" .idle=${false} .trackPointer=${this._finePointer}></quill-mascot></span></span></button>
+            <button class="quill-btn" aria-label="Quill the penguin. Tap him for a trick." @click=${this._tapQuill}><span class="q-body"><span class="q-breath amb"><quill-mascot size="hero" .idle=${false} .restAfter=${this._reduced ? 0 : SKY_REST_MS} .trackPointer=${this._finePointer}></quill-mascot></span></span></button>
             <p class="bubble ${this._say ? 'said' : ''}" aria-live="polite">${this._say || "Hi, I'm Quill! Tap me."}</p>
           </div>
         </div>

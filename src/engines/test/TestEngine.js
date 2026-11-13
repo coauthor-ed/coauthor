@@ -124,6 +124,13 @@ export class TestEngine {
       throw new Error("Test data is invalid or empty.");
     }
 
+    // Offline (D18): OfflinePrefetcher caches every question of this test
+    // in the background, not only the ones answered while online.
+    EventBus.emit('test:opened', {
+      testId: this.testId,
+      entries: this.testData.questions.map((d) => this._describeNextQuestion(d)),
+    });
+
     // 2. Reviewing a past attempt (from a "Review results" link, never the
     // default) takes priority over the normal resume-or-start flow below —
     // it must not touch the active-attempt meta pointer or wipe anything.
@@ -423,6 +430,8 @@ export class TestEngine {
       testId: this.testId,
       current: questionData,
       next: nextDescriptor ? [this._describeNextQuestion(nextDescriptor)] : [],
+      // The next two questions (Q-45), fetched ahead by OfflinePrefetcher.
+      ahead: this.testData.questions.slice(this.currentIndex + 1, this.currentIndex + 3).map((d) => this._describeNextQuestion(d)),
     });
   }
 

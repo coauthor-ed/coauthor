@@ -250,3 +250,9 @@ export const iconToc = uiSvg(svg`<path d="M4 6h16"></path><path d="M7 11h13M7 16
 export const iconFlag = uiSvg(svg`<path d="M5.5 21V4"></path><path d="M5.5 4.5h11.2l-2.4 4 2.4 4H5.5"></path>`, 18);
 export const iconSend = uiSvg(svg`<path d="M20.5 3.5 10 14"></path><path d="M20.5 3.5 14 20.5l-4-6.5-6.5-4z"></path>`, 18);
 export const iconMail = uiSvg(svg`<rect x="3.5" y="5.5" width="17" height="13" rx="2.5"></rect><path d="M4 7l8 6 8-6"></path>`, 18);
+
+/* Share (Q-52): three linked dots; and a small QR-like grid for "show QR". */
+/** Q-66: the theme follows the device (half light, half dark). */
+export const iconThemeDevice = uiSvg(svg`<circle cx="12" cy="12" r="8.5"></circle><path d="M12 3.5a8.5 8.5 0 0 1 0 17z" fill="currentColor" stroke="none"></path>`, 20);
+export const iconShare = uiSvg(svg`<circle cx="18" cy="5.5" r="2.6"></circle><circle cx="6" cy="12" r="2.6"></circle><circle cx="18" cy="18.5" r="2.6"></circle><path d="M8.3 10.8l7.4-4.1M8.3 13.2l7.4 4.1"></path>`, 18);
+export const iconPhoneDown = uiSvg(svg`<rect x="6.5" y="2.5" width="11" height="19" rx="2.5"></rect><path d="M12 7.5v7M9.2 11.8 12 14.6l2.8-2.8"></path>`, 18);

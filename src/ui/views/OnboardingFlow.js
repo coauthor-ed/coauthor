@@ -4,6 +4,7 @@ import { btn3dStyles } from '../sharedStyles.js';
 import { loadBrandPieces } from '../components/LookSlots.js';
 import { LookManager } from '../../core/LookManager.js';
 import { LookMixin } from '../../core/mixins/LookMixin.js';
+import { readPendingAdd } from '../../core/shareLinks.js';
 
 // The look's signature is defined before this view first renders.
 await loadBrandPieces('signature');
@@ -212,6 +213,16 @@ export class OnboardingFlow extends LookMixin(LitElement) {
     this.isProcessing = false;
   }
 
+  connectedCallback() {
+    super.connectedCallback();
+    // Came from a shared college or adult course link (#/add): start on
+    // "College or adult", the learner can still change it.
+    const pending = readPendingAdd();
+    if (pending && (pending.audience === 'college' || pending.audience === 'adult') && LEARNERS.some((l) => l.id === 'adult')) {
+      this._setLearner('adult');
+    }
+  }
+
   disconnectedCallback() {
     super.disconnectedCallback();
     // Leaving without saving: the active profile decides the look again.
@@ -267,7 +278,9 @@ export class OnboardingFlow extends LookMixin(LitElement) {
       // The look's signature celebrates the new learner (Quill: a jump and
       // confetti) before the app reloads into home.
       await this.renderRoot.querySelector('app-signature')?.companion?.celebrate?.();
-      window.location.hash = '#/';
+      // A shared course link waiting for this profile goes back to its own
+      // page, which then adds the course without asking again.
+      window.location.hash = readPendingAdd()?.hash || '#/';
       window.location.reload();
     } catch (err) {
       console.error(err);

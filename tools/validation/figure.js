@@ -156,4 +156,15 @@ export function checkFigure(fig, errors, block = {}) {
     });
     for (const [s, c] of perStep) if (c > 3) E(`${c} notes arrive at step ${s}; at most 3 show at once`);
   }
+
+  // focus: false, or [{ step, on: id | [ids] }] (FigureLayouts figureFocus).
+  if (fig.focus !== undefined && fig.focus !== false) {
+    if (!Array.isArray(fig.focus)) { E('focus must be false or an array of { step, on }'); return; }
+    const targets = new Set([...ids, ...(L === 'steps' && fig.gate ? ['gate'] : []), ...(L === 'steps' && fig.after ? ['after'] : [])]);
+    fig.focus.forEach((f, i) => {
+      const w = `focus[${i}]`;
+      if (!Number.isInteger(f?.step) || f.step < 1) E(`${w}.step must be a 1-based beat number`);
+      for (const on of [].concat(f?.on ?? [])) if (!targets.has(on)) E(`${w}.on "${on}" names no item${L === 'steps' ? ' (or gate / after)' : ''}`);
+    });
+  }
 }

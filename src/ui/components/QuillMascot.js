@@ -35,6 +35,12 @@ const SINGLE_LINE_AUTO_HIDE_MS = 6000;
 
 const SIZES = { mini: 56, sm: 96, md: 160, hero: 280 };
 
+// Idle loops (Q-46, battery): the rig's own blink, scarf flutter and bob, plus
+// any loop a host puts on this element itself (the hero card's hero-bob). They
+// pause while he is off-screen, the tab is hidden, or the host marks him
+// dormant (a hidden coach); with rest-after they wind down to his rest pose.
+const RIG_IDLE = new Set(['q-blink', 'q-flutter', 'q-bob']);
+
 export class QuillMascot extends LitElement {
   static properties = {
     size: { type: String, reflect: true },
@@ -43,6 +49,11 @@ export class QuillMascot extends LitElement {
     lines: { type: Array },
     trackPointer: { type: Boolean, attribute: 'track-pointer' },
     idle: { type: Boolean, reflect: true },
+    /** Host says he cannot be seen (opacity 0, a closed dock): idle loops pause. */
+    dormant: { type: Boolean },
+    /** ms of idle motion before he settles (each loop ends its cycle); 0 = never.
+     *  A tap, an act (a cue) or a route change wakes him for another round. */
+    restAfter: { type: Number, attribute: 'rest-after' },
     _speech: { state: true },
   };
 
@@ -96,7 +107,15 @@ export class QuillMascot extends LitElement {
     this.lines = null;
     this.trackPointer = false;
     this.idle = true;
+    this.dormant = false;
+    this.restAfter = 0;
     this._speech = '';
+    this._onScreen = true;
+    this._rested = false;
+    this._held = new Set();
+    this._wound = new Set();   // loops we let finish (a finished one drops out of getAnimations())
+    this._sync = this._sync.bind(this);
+    this.wake = this.wake.bind(this);
     this._ns = `q${++instanceSeq}`;
     this._busy = false;
     this._lastActAt = 0;
@@ -110,9 +129,26 @@ export class QuillMascot extends LitElement {
     if (!this.lines) this.setAttribute('aria-hidden', 'true');
     if (this.trackPointer) window.addEventListener('pointermove', this._onPointerMove, { passive: true });
     if (this.lines?.length) this._startLineRotation();
+    document.addEventListener('visibilitychange', this._sync);
+    window.addEventListener('hashchange', this.wake);
+    this.addEventListener('pointerdown', this.wake);
+    if (typeof IntersectionObserver === 'function') {
+      this._io = new IntersectionObserver((es) => {
+        this._onScreen = es[es.length - 1].isIntersecting;
+        this._sync();
+      });
+      this._io.observe(this);
+    }
+    this._armRest();
   }
 
   disconnectedCallback() {
+    document.removeEventListener('visibilitychange', this._sync);
+    window.removeEventListener('hashchange', this.wake);
+    this.removeEventListener('pointerdown', this.wake);
+    this._io?.disconnect();
+    this._io = null;
+    clearTimeout(this._restTimer);
     // Always remove: a listener outliving the element is the classic leak, and
     // this one fires on every mouse move for the life of the page.
     window.removeEventListener('pointermove', this._onPointerMove);
@@ -124,6 +160,8 @@ export class QuillMascot extends LitElement {
   updated(changed) {
     if (changed.has('expression')) setExpression(this.renderRoot, this.expression);
     if (changed.has('idle')) this.setAttribute('data-idle', String(!!this.idle));
+    if (changed.has('idle') || changed.has('dormant')) requestAnimationFrame(this._sync);
+    if (changed.has('restAfter')) this._armRest();
     if (changed.has('act') && this.act) {
       this.perform(this.act);
       this.act = '';
@@ -197,6 +235,7 @@ export class QuillMascot extends LitElement {
     if (this._busy || (!force && now - this._lastActAt < ACT_COOLDOWN_MS)) return false;
     this._busy = true;
     this._lastActAt = now;
+    this.wake();
     try {
       await performAct(this.renderRoot, act, target);
     } finally {
@@ -204,6 +243,73 @@ export class QuillMascot extends LitElement {
       this.dispatchEvent(new CustomEvent('quill-act-finished', { detail: { act }, bubbles: true, composed: true }));
     }
     return true;
+  }
+
+  // -- idle loops -----------------------------------------------------------
+
+  /** Every idle loop on him: the rig's (shadow) and the host's (on this element). */
+  _idleAnims() {
+    const loop = (a) => a.effect?.getTiming?.().iterations === Infinity || this._wound.has(a);
+    const own = (this.getAnimations?.() || []).filter(loop);
+    const rig = (this.renderRoot?.getAnimations?.() || []).filter((a) => RIG_IDLE.has(a.animationName));
+    return [...own, ...rig];
+  }
+
+  /** Can anyone see him right now? */
+  get _active() {
+    return this.isConnected && this._onScreen && !this.dormant && document.visibilityState !== 'hidden';
+  }
+
+  /** Pause idle loops nobody can see; resume the ones we paused when he is seen again. */
+  _sync() {
+    const anims = this._idleAnims();
+    if (!this._active) {
+      for (const a of anims) {
+        if (a.playState === 'running') { a.pause(); this._held.add(a); }
+      }
+      return;
+    }
+    for (const a of this._held) if (a.playState === 'paused') a.play();
+    this._held.clear();
+  }
+
+  _armRest() {
+    clearTimeout(this._restTimer);
+    if (!(this.restAfter > 0) || !this.isConnected) return;
+    this._restTimer = setTimeout(() => this._rest(), this.restAfter);
+  }
+
+  /** Let every idle loop finish the cycle it is in: he ends in his rest pose, no jump. */
+  _rest() {
+    if (!this._active) { this._armRest(); return; }   // nobody saw the round: try again later
+    for (const a of this._idleAnims()) {
+      const t = a.effect?.getComputedTiming?.();
+      if (!t || t.iterations !== Infinity) continue;
+      a.effect.updateTiming({ iterations: (t.currentIteration ?? 0) + 1 });
+      this._wound.add(a);
+    }
+    this._rested = true;
+  }
+
+  /** Another round of idle motion (a tap, an act, a route change). */
+  wake() {
+    if (this.restAfter > 0) {
+      if (this._rested) {
+        this._rested = false;
+        const wound = [...this._wound];
+        this._wound.clear();
+        for (const a of wound) {
+          const t = a.effect?.getComputedTiming?.();
+          if (!t || t.iterations === Infinity) continue;
+          const done = a.playState === 'finished';
+          a.effect.updateTiming({ iterations: Infinity });
+          if (!done) continue;   // still in its last cycle: it simply carries on
+          a.currentTime = 0;
+          if (this._active) a.play(); else { a.pause(); this._held.add(a); }
+        }
+      }
+      this._armRest();
+    }
   }
 
   /** Glance: pupils only, so like an expression it is not an act. dx/dy are

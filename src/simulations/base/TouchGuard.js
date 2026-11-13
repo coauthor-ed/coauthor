@@ -37,13 +37,17 @@ export function guardInteractiveCanvas(cv) {
   };
 }
 
-const GRAB = /^(grab|grabbing|move|all-scroll|[a-z]+-resize|crosshair)$/;
+// crosshair is a pointing cursor (tap to mark a point), not a grab: it is left out, or a touch that
+// starts on it is cancelled and the tap never becomes a click on a phone (Q-89). A scene that drags on
+// a crosshair surface sets touch-action: none on it (or uses grab), as SvgScene / pointer scrubbers do.
+const GRAB = /^(grab|grabbing|move|all-scroll|[a-z]+-resize)$/;
 
 /**
  * DOM / SVG scenes: a touch that STARTS on something whose computed cursor says
- * "draggable" (grab, grabbing, move, *-resize, crosshair; `cursor` inherits, so a
+ * "draggable" (grab, grabbing, move, all-scroll, *-resize; `cursor` inherits, so a
  * `.sv-drag` group covers its children) does not scroll the page. Decided once at
- * touchstart; a touch that starts elsewhere scrolls as normal.
+ * touchstart; a touch that starts elsewhere scrolls as normal. Pointing cursors
+ * (pointer, crosshair) are tap targets and are never held: holding cancels the click.
  */
 export function guardGrabTargets(el) {
   let hold = false;

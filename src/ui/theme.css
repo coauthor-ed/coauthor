@@ -225,6 +225,10 @@
   /* Dim layer behind a modal dialog or bottom sheet (parent area dialogs,
      the student menu's phone sheet). Darkens the page in every mode. */
   --scrim: rgb(38 36 29 / 0.45);
+  /* Share sheet QR (src/ui/components/ShareSheet.js): always dark modules on
+     a light field, in both themes and every look, so phone cameras read it. */
+  --qr-dark: #14130f;
+  --qr-light: #ffffff;
   /* Narrated lessons (src/ui/components/NarrationUi.js): the caption card,
      its word highlight (a brass sweep under dark ink), and the strip's
      beat scrubber. Built from the base tokens, so a look re-values them. */
@@ -536,6 +540,9 @@ html[data-theme="dark"] {
 
   --glass-bg: rgb(28 27 23 / 0.92);
   --scrim: rgb(0 0 0 / 0.6);
+  /* QR stays dark-on-light at night too (scanners need it). */
+  --qr-dark: #14130f;
+  --qr-light: #ffffff;
   /* Narrated lessons (src/ui/components/NarrationUi.js): the caption card,
      its word highlight (a brass sweep under dark ink), and the strip's
      beat scrubber. Built from the base tokens, so a look re-values them. */

@@ -19,6 +19,12 @@ import { EventBus } from '../EventBus.js';
  */
 
 const shown = (item, step) => !(Number.isInteger(item?.revealAt) && item.revealAt > step);
+// Narration focus (spec W1 D29n; content-block _narrFocusAt): an item with an
+// `id` that a show.<id> cue has not reached yet stays hidden like a later
+// revealAt; with focus on, the named series are drawn bolder and the rest
+// fade (graph only). Never set in text mode.
+const NARR_OFF = { narrated: false, on: [], held: [] };
+const notHeld = (item, narr) => !(narr.narrated && item?.id != null && narr.held.includes(String(item.id)));
 
 function diagramAt(diagram, step, viewBox) {
   const pts = (diagram.points || []).filter((p) => shown(p, step));
@@ -48,12 +54,21 @@ export function mountStepDiagram(hostEl, diagram, initialStep = 0) {
   GeometryDiagram.plot(svgEl, diagram);
   const viewBox = diagram.viewBox || (svgEl.getAttribute('viewBox') || '0 0 100 100').split(/\s+/).map(Number);
   let step = initialStep;
-  const plot = () => GeometryDiagram.plot(svgEl, diagramAt(diagram, step, viewBox));
+  let narr = NARR_OFF;
+  const plot = () => GeometryDiagram.plot(svgEl, diagramAt(narr.narrated && narr.held.length
+    ? Object.fromEntries(Object.entries(diagram).map(([k, v]) => [k, Array.isArray(v) ? v.filter((x) => notHeld(x, narr)) : v]))
+    : diagram, step, viewBox));
   plot();
   EventBus.on('theme:changed', plot);
   return {
     viewBox,
     setStep(s) { if (s !== step) { step = s; plot(); } },
+    narrationFocus(st = {}) {
+      const next = { narrated: !!st.narrated, on: (st.on || []).map(String), held: (st.held || []).map(String) };
+      if (JSON.stringify(next) === JSON.stringify(narr)) return;
+      narr = next;
+      plot();
+    },
     destroy() { EventBus.off('theme:changed', plot); },
   };
 }
@@ -65,17 +80,26 @@ export async function mountStepGraph(hostEl, graph, initialStep = 0) {
   const series = [];
   for (const fn of graph.functions || []) {
     const s = await functionSeries(fn, graph.xDomain);
-    if (s) series.push({ revealAt: fn.revealAt, ...s });
+    if (s) series.push({ revealAt: fn.revealAt, id: fn.id, ...s });
   }
   const allPts = [...series.flatMap((s) => s.points), ...(graph.points || [])];
   const ys = allPts.map((p) => p.y).filter(Number.isFinite);
   const yDomain = graph.yDomain || (ys.length ? [Math.min(0, ...ys), Math.max(...ys) * 1.05 || 1] : undefined);
   let step = initialStep;
+  let narr = NARR_OFF;
   const plot = () => {
-    const now = series.filter((s) => shown(s, step)).map(({ revealAt, ...s }) => s);
-    const pts = (graph.points || []).filter((p) => shown(p, step));
-    if (pts.length) now.push({ label: 'points', color: 'muted', type: 'scatter', points: pts });
+    const focus = narr.narrated && narr.on.length ? new Set(narr.on) : null;
+    const look = (id) => (!focus ? {} : focus.has(String(id)) ? { emph: true } : { opacity: 0.3 });
+    const now = series.filter((s) => shown(s, step) && notHeld(s, narr)).map(({ revealAt, id, ...s }) => ({ ...s, ...look(id) }));
+    const pts = (graph.points || []).filter((p) => shown(p, step) && notHeld(p, narr));
+    // The points are what a graph slide is about (the cases against the usual
+    // curve): the primary colour (plain: the signature), unless the author named one.
+    if (pts.length) {
+      const lit = focus && (focus.has('points') || pts.some((p) => p.id != null && focus.has(String(p.id))));
+      now.push({ label: 'points', color: graph.pointsColor || 'primary', type: 'scatter', points: pts, ...(focus ? (lit ? { emph: true } : { opacity: 0.3 }) : {}) });
+    }
     return GraphPlotter.plot(svgEl, {
+      editorial: document.documentElement.dataset.look === 'plain',
       type: 'line', xLabel: graph.xLabel || 'x', yLabel: graph.yLabel || 'y', xDomain: graph.xDomain, yDomain,
       showGrid: graph.showGrid !== false, xStep: graph.xStep, yStep: graph.yStep, series: now, a11yCaption: graph.a11yCaption,
     });
@@ -85,6 +109,12 @@ export async function mountStepGraph(hostEl, graph, initialStep = 0) {
   EventBus.on('theme:changed', onTheme);
   return {
     setStep(s) { if (s !== step) { step = s; plot(); } },
+    narrationFocus(st = {}) {
+      const next = { narrated: !!st.narrated, on: (st.on || []).map(String), held: (st.held || []).map(String) };
+      if (JSON.stringify(next) === JSON.stringify(narr)) return;
+      narr = next;
+      plot();
+    },
     destroy() { EventBus.off('theme:changed', onTheme); },
   };
 }

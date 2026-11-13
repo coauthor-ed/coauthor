@@ -22,7 +22,8 @@ export const plainLookStyles = css`
   }
   :host([data-look="plain"]) .cb-reading .rv-steps > .rv-step { padding-left: 0; color: var(--text-main); }
   :host([data-look="plain"]) .cb-reading .rv-steps > .rv-step::before,
-  :host([data-look="plain"]) .cb-reading .rv-steps > .rv-step::after { display: none; }
+  :host([data-look="plain"]) .cb-reading .rv-steps > .rv-step::after,
+  :host([data-look="plain"]) .cb-reading .rv-steps > .rv-step > markdown-renderer::before { display: none; }
   :host([data-look="plain"]) .cb-reading .rv-steps > .rv-step > markdown-renderer { padding-left: 0; background: none; }
   :host([data-look="plain"]) .cb-reading .rv-more { text-align: center; }
 
@@ -64,7 +65,8 @@ export const plainLookStyles = css`
      short signature-colour bar, past beats stay readable. ── */
   :host([data-look="plain"]) .rv-steps > .rv-step { padding-left: 0; color: var(--text-main); }
   :host([data-look="plain"]) .rv-steps > .rv-step::before,
-  :host([data-look="plain"]) .rv-steps > .rv-step::after { display: none; }
+  :host([data-look="plain"]) .rv-steps > .rv-step::after,
+  :host([data-look="plain"]) .rv-steps > .rv-step > markdown-renderer::before { display: none; }
   :host([data-look="plain"]) .rv-steps > .rv-step > markdown-renderer {
     padding-left: 16px;
     background: linear-gradient(var(--signature), var(--signature)) no-repeat 0 4px / 0 calc(100% - 20px);

@@ -4,8 +4,10 @@ import './FeedbackBanner.js';
 import { brandIcon } from '../../ui/components/LookSlots.js';
 import '../../ui/components/MarkdownRenderer.js';
 import './QuestionExplanation.js';
-import { blockImageLayoutStyles, renderBlockImage, blockLayoutClass } from './blockImageLayout.js';
-import { mountQuestionSimulation, destroyQuestionSimulation, renderSimControls, renderSimCard } from './simulationHost.js';
+import { blockImageLayoutStyles, renderBlockImage, blockLayoutClass, BlockImageFitController } from './blockImageLayout.js';
+import {
+  mountQuestionSimulation, destroyQuestionSimulation, renderSimControls, renderSimCard, setupSimFitStyles, fitSetupSimAtRest,
+} from './simulationHost.js';
 import { mountQuestionGraph, renderGraphCard } from './graphHost.js';
 import { mountQuestionDiagram, renderDiagramCard } from './diagramHost.js';
 import { LookMixin } from '../mixins/LookMixin.js';
@@ -92,7 +94,7 @@ export class QuestionBase extends LookMixin(LitElement) {
       background: var(--sim-bg-deep, #0a0f1e);
       line-height: 0;
     }
-    .q-sim-host-container canvas {
+    .q-sim-host-container canvas:not([data-sim-own-size]):not(.sim-dom-root canvas[style*="width"], .sim-dom-root canvas[style*="height"]) {
       width: 100% !important;
       height: auto !important;
       display: block;
@@ -259,7 +261,7 @@ export class QuestionBase extends LookMixin(LitElement) {
         max-width: 100%;
       }
     }
-  `, plainAnswerPanelStyles];
+  `, setupSimFitStyles, plainAnswerPanelStyles];
 
   constructor() {
     super();
@@ -290,6 +292,15 @@ export class QuestionBase extends LookMixin(LitElement) {
     // _maybeObserveSimCard().
     this._simCardVisible = false;
     this._simCardObserver = null;
+
+    // Q-60: image height fit + fit-at-rest (as content-block / poe-predict),
+    // and the listeners the setup-sim fit re-measures on.
+    this._mediaFit = new BlockImageFitController(this, {
+      image: () => (this.constructor.rendersOwnMedia ? null : this._data?.image),
+      bundleId: () => this._ctx?.bundleId,
+      active: () => !this._ctx?.previewOnly && !!((!this.constructor.rendersOwnMedia && this._data?.image?.src)
+        || (this._data?.simulation?.src && this._data.simulation.role === 'setup')),
+    });
   }
 
   /** Required plugin lifecycle — called by mountPlugin.js. `ctx` (e.g.
@@ -346,6 +357,7 @@ export class QuestionBase extends LookMixin(LitElement) {
   updated(changedProperties) {
     super.updated?.(changedProperties);
     if (this._ctx?.previewOnly) return;
+    fitSetupSimAtRest(this.shadowRoot);
     this._maybeMountGraph();
     this._maybeMountDiagram();
     const sim = this._data?.simulation;
@@ -545,10 +557,11 @@ export class QuestionBase extends LookMixin(LitElement) {
       `;
     }
     if (!image?.src || this.constructor.rendersOwnMedia) return html`${content}${simFab}`;
+    const fit = this._mediaFit.resolve();
     return html`
-      <div class="${blockLayoutClass(image, null)}">
+      <div class="${fit ? `cb-layout-${fit.layout}` : blockLayoutClass(image, null)}">
         <div class="cb-text">${content}</div>
-        ${renderBlockImage(image, { bundleId: this._ctx?.bundleId })}
+        ${renderBlockImage(image, { capped: fit?.capped, zoomAffordance: fit?.zoomAffordance, widthPx: fit?.widthPx, bundleId: this._ctx?.bundleId })}
       </div>
       ${simFab}
     `;

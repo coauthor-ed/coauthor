@@ -11,7 +11,10 @@ import { CUES, emitCue } from '../../../../core/cues.js';
 import '../../../../ui/components/LookSlots.js';
 import { LookMixin } from '../../../../core/mixins/LookMixin.js';
 import { LookManager } from '../../../../core/LookManager.js';
+import { restTopChanged } from '../../../../core/components/blockImageLayout.js';
 
+/** Q-86: readability floor for a fitted DOM board (kit .btn 15 px stays >= 13 px). */
+const MIN_FIT_SCALE = 0.87;
 // Inside a game's board: controls that run the game's flow rather than move a piece.
 const GAME_FLOW_CONTROLS = '[class*="-check"], [class*="-next"], [data-act="next"], [data-sflow-action="next"]';
 
@@ -111,7 +114,7 @@ export class MiniGamePlugin extends LookMixin(LitElement) {
     .mg-badge {
       font-family: var(--font-label, var(--font-heading));
       font-weight: var(--fw-heavy);
-      font-size: var(--fs-kicker);
+      font-size: max(0.8rem, var(--fs-kicker));
       letter-spacing: 0.12em;
       text-transform: uppercase;
       color: var(--on-primary);
@@ -157,7 +160,19 @@ export class MiniGamePlugin extends LookMixin(LitElement) {
       max-width: none;
       width: min(100%, calc(clamp(420px, 72vh, 760px) * var(--mg-sim-aspect, 1.5)));
     }
-    .sim-host canvas { width: 100% !important; height: auto !important; display: block; }
+    /* Q-61: fit above the action bar (desktop, game look). --mg-fit-w is the
+       board width whose height ends above the bar at rest (_fitBoard: the
+       board's resting top, the controls under it and the foot when it holds
+       the Check button). Only ever narrows the rules above, and never below
+       600 px (a DOM board under 600 px flips to its tall portrait design). */
+    @media (min-width: 601px) {
+      :host(:not([data-exercise])) .sim-host.sim-host--fluid {
+        width: min(100%, calc(clamp(420px, 72vh, 760px) * var(--mg-sim-aspect, 1.5)),
+          max(min(600px, calc(clamp(420px, 72vh, 760px) * var(--mg-sim-aspect, 1.5))), var(--mg-fit-w, 9999px)));
+      }
+      :host(:not([data-exercise])) .sim-host:not(.sim-host--fluid) { max-width: min(820px, max(600px, var(--mg-fit-w, 9999px))); }
+    }
+    .sim-host canvas:not([data-sim-own-size]):not(.sim-dom-root canvas[style*="width"], .sim-dom-root canvas[style*="height"]) { width: 100% !important; height: auto !important; display: block; }
     .sim-host .sim-dom-root { line-height: normal; }
     .q-sim-controls { max-width: 820px; margin-left: auto; margin-right: auto; }
     .mg-body:has(.sim-host--fluid) .q-sim-controls { max-width: none; }
@@ -232,6 +247,10 @@ export class MiniGamePlugin extends LookMixin(LitElement) {
   }
 
   disconnectedCallback() {
+    window.removeEventListener('resize', this._onFitResize);
+    this._fitWatch?.disconnect();
+    this._fitWatch = null;
+    clearTimeout(this._fitTimer);
     destroyQuestionSimulation(this._scene);
     this._scene = null;
     super.disconnectedCallback();
@@ -258,6 +277,7 @@ export class MiniGamePlugin extends LookMixin(LitElement) {
       this._ready = true;
       this._status = 'playing';
       await this.updateComplete;
+      this._watchFit();
       this._playIntro();
     } catch (e) {
       this._error = `Could not load this game: ${e.message}`;
@@ -387,6 +407,66 @@ export class MiniGamePlugin extends LookMixin(LitElement) {
     const host = this.renderRoot?.querySelector('.sim-host');
     host?.style.setProperty('--mg-sim-aspect', String(this._simAspect()));
     if (this._SceneClass?.WIDTH) host?.style.setProperty('--mg-sim-w', `${this._SceneClass.WIDTH}px`);
+    this._fitBoard();
+  }
+
+  /** Q-61: refit on a resize, when the card changes size (the goal line
+   *  wraps, a font loads, the board grows) and once after the slide has
+   *  settled (a slide transition can move the card while it is measured). */
+  _watchFit() {
+    window.addEventListener('resize', this._onFitResize);
+    const card = this.renderRoot?.querySelector('.mg-card');
+    if (card && typeof ResizeObserver === 'function') {
+      this._fitWatch = new ResizeObserver(() => this._fitBoard());
+      this._fitWatch.observe(card);
+    }
+    this._fitTimer = setTimeout(() => this._fitBoard(), 700);
+    this._fitBoard();
+  }
+
+  _onFitResize = () => this._fitBoard();
+
+  /**
+   * Q-61: sizes the board so it ends above the lesson's action bar when the
+   * slide opens (scrolled to the top), the way content-block fits a side
+   * scene (Q-55/Q-57). Lanes used to size boards by hand, and a board 1165 px
+   * wide at 1280x720 put its last row and its Check under the bar.
+   * Measured: the board's resting top in page coordinates, the controls
+   * under it, and the foot when it holds the host's Check button (a
+   * SELF_CHECKING game has its own Check on the board, and its verdict is
+   * scrolled into view). The board's own aspect comes from its rendered box.
+   * None of these depend on the board's width, and sub-3 px changes are
+   * ignored, so this cannot loop. Phones and the exercise framing (plain,
+   * which has its own --mg-chrome budget) are left as they were.
+   */
+  _fitBoard() {
+    const host = this.renderRoot?.querySelector('.sim-host');
+    if (!host || !this._scene || typeof window === 'undefined') return;
+    if (this.hasAttribute('data-exercise') || window.matchMedia('(max-width: 600px)').matches) {
+      if (this._fitW != null) { this._fitW = null; host.style.removeProperty('--mg-fit-w'); }
+      return;
+    }
+    const box = host.getBoundingClientRect();
+    if (!box.width || !box.height) return;
+    const body = host.closest('.mg-body');
+    const foot = this.renderRoot.querySelector('.mg-foot');
+    const below = (body ? body.getBoundingClientRect().bottom - box.bottom : 0)
+      + (foot?.querySelector('button') ? foot.getBoundingClientRect().height : 0);
+    const bar = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--lesson-chrome-bottom')) || 0;
+    const top = box.top + (document.scrollingElement?.scrollTop || 0);
+    const fitH = window.innerHeight - bar - top - below - 8;   // 8 px air above the bar
+    let next = Math.max(0, Math.round(fitH * (box.width / box.height)));
+    // Q-86: a DOM board is never fitted below MIN_FIT_SCALE of its design
+    // width (or the scene's own MIN_SCALE): at 1280x720 the fit scaled boards
+    // to 0.81, the kit's 15 px buttons to 12.2 px. The board may then end a
+    // little lower; the page scrolls as it did before the fit.
+    const W = this._SceneClass?.WIDTH;
+    if (W && this._scene instanceof DomSimulation) {
+      next = Math.max(next, Math.round(W * Math.max(MIN_FIT_SCALE, this._SceneClass.MIN_SCALE || 0)));
+    }
+    if (!restTopChanged(this._fitW ?? null, next)) return;
+    this._fitW = next;
+    host.style.setProperty('--mg-fit-w', `${next}px`);
   }
 
   _goalText() {

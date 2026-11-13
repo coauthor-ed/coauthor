@@ -3,6 +3,7 @@ import { SimulationLoader } from '../SimulationLoader.js';
 import { controlCurrent, optValue, optLabel, toControlValue } from '../../simulations/base/SimControls.js';
 import { answerStageQueries } from './stageAnswer.js';
 import { brandIcon } from '../../ui/components/LookSlots.js';
+import { measureRestTop, restTopChanged, sideRestExtra } from './blockImageLayout.js';
 
 // scene -> stop answering cue:stage-query, for destroyQuestionSimulation().
 const stageAnswers = new WeakMap();
@@ -84,6 +85,12 @@ export async function mountQuestionSimulation(hostEl, src, bundleId, stage = {},
   // pattern) — this only touches scenes that implement `onBeatChange`;
   // anything else is unaffected. Wrapped defensively: a scene's own
   // onBeatChange throwing must not take the whole question down with it.
+  // Q-60: a setup canvas scene publishes its aspect for setupSimFitStyles'
+  // height budget (a DOM scene publishes --sim-aspect itself).
+  if (role === 'setup' && scene.canvas && SceneClass.WIDTH && SceneClass.HEIGHT) {
+    hostEl.closest('.q-sim-host-container')?.style.setProperty('--setup-sim-canvas-aspect', String(SceneClass.WIDTH / SceneClass.HEIGHT));
+  }
+
   try {
     scene.onBeatChange?.(Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER);
   } catch (err) {
@@ -259,7 +266,7 @@ export const companionSimStyles = css`
     background: var(--sim-bg-deep, #0a0f1e);
     line-height: 0;
   }
-  .q-sim-host-container canvas { width: 100% !important; height: auto !important; display: block; }
+  .q-sim-host-container canvas:not([data-sim-own-size]):not(.sim-dom-root canvas[style*="width"], .sim-dom-root canvas[style*="height"]) { width: 100% !important; height: auto !important; display: block; }
   .q-sim-host-container .sim-dom-root { line-height: normal; }
   .q-sim-controls { max-width: 820px; margin-left: auto; margin-right: auto; }
   .q-sim-card {
@@ -277,6 +284,77 @@ export const companionSimStyles = css`
     .cb-layout-left  .q-sim-card { flex: unset; max-width: 100%; width: 100%; box-sizing: border-box; }
   }
 `;
+
+/**
+ * Fit rules for a `role: "setup"` sim card beside the prompt (Q-59 built them
+ * for poe-predict@1; Q-60 shares them with QuestionBase and mcq-single@2).
+ * Put AFTER the host's own card rules in `static styles`.
+ *
+ * - Side by side (min-width 601): the scene is sized from the viewport
+ *   HEIGHT so the card ends above the action bar. `--setup-sim-chrome` is
+ *   everything in that height that is not the scene; every host sets the
+ *   measured value with fitSetupSimAtRest() (card chrome + resting offset;
+ *   poe-predict since Q-86, its fixed 170 px default left the card 47 px
+ *   under the action bar at 1280x800). A DOM scene
+ *   publishes --sim-aspect, a canvas scene --setup-sim-canvas-aspect
+ *   (mountQuestionSimulation).
+ * - Phone (max-width 600): the card stacks and the page scrolls, as
+ *   content-block does since Q-57; the card drops its own chrome so the
+ *   scene takes the full column.
+ */
+export const setupSimFitStyles = css`
+  @media (min-width: 601px) {
+    .cb-layout-right .q-sim-host-container .sim-dom-scale-wrap,
+    .cb-layout-left  .q-sim-host-container .sim-dom-scale-wrap {
+      max-width: min(100%, calc((100vh - var(--lesson-sticky-header-h, 0px) - var(--lesson-chrome-bottom, 0px) - var(--setup-sim-chrome, 170px)) * var(--sim-aspect, 1000)));
+      margin: 0 auto;
+    }
+    .cb-layout-right .q-sim-host-container,
+    .cb-layout-left  .q-sim-host-container {
+      max-width: min(820px, calc(max(240px, 100vh - var(--lesson-sticky-header-h, 0px) - var(--lesson-chrome-bottom, 0px) - var(--setup-sim-chrome, 170px) - 16px) * var(--setup-sim-canvas-aspect, 1000)));
+    }
+    .cb-layout-right .q-sim-card,
+    .cb-layout-left  .q-sim-card {
+      position: sticky;
+      top: calc(var(--lesson-sticky-header-h, 0px) + 8px);
+    }
+  }
+  @media (max-width: 600px) {
+    .cb-layout-right .q-sim-card,
+    .cb-layout-left  .q-sim-card {
+      padding: 0;
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      box-shadow: none;
+    }
+  }
+`;
+
+/**
+ * Sets `--setup-sim-chrome` on a question's side setup-sim row: the card's
+ * own chrome (heading, padding, controls; not the scene) plus how much
+ * lower than its sticky spot the row sits at rest (measureRestTop /
+ * sideRestExtra, Q-59). Call from the host's updated(). The value does not
+ * depend on the scene's size, and sub-3 px changes are ignored, so it
+ * cannot loop. A phone clears it (the page scrolls there). `extra`: chrome
+ * the host draws below the row (poe-predict's own card padding, Q-86).
+ */
+export function fitSetupSimAtRest(root, extra = 0) {
+  const row = root?.querySelector('.cb-layout-right, .cb-layout-left');
+  const card = row?.querySelector(':scope > .q-sim-card');
+  const box = card?.querySelector('.q-sim-host-container');
+  if (!box || typeof window === 'undefined') return;
+  if (window.matchMedia('(max-width: 600px)').matches) {
+    row.style.removeProperty('--setup-sim-chrome');
+    return;
+  }
+  // sideRestExtra counts from header + 12; + 8 air above the bar
+  const next = Math.round(card.offsetHeight - box.offsetHeight + 20 + extra + sideRestExtra(measureRestTop(row)));
+  const prev = parseFloat(row.style.getPropertyValue('--setup-sim-chrome'));
+  if (!restTopChanged(Number.isFinite(prev) ? prev : null, next)) return;
+  row.style.setProperty('--setup-sim-chrome', `${next}px`);
+}
 
 /**
  * The wrapping card shown around a mounted (or loading/failed) companion
@@ -308,7 +386,7 @@ export const companionSimStyles = css`
  *
  *   .q-sim-card { margin-top: 1.25rem; padding: 16px 18px; background: var(--bg-surface); border-radius: 16px; border: 2px solid var(--border-color); box-shadow: 0 3px 0 var(--border-color); }
  *   .q-sim-host-container { width: 100%; max-width: 820px; margin: 0 auto; height: auto; line-height: 0; }
- *   .q-sim-host-container canvas { width: 100% !important; height: auto !important; display: block; }
+ *   .q-sim-host-container canvas:not([data-sim-own-size]):not(.sim-dom-root canvas[style*="width"], .sim-dom-root canvas[style*="height"]) { width: 100% !important; height: auto !important; display: block; }
  *   .q-sim-host-container .sim-dom-root { line-height: normal; }
  *   .q-sim-controls { max-width: 820px; margin-left: auto; margin-right: auto; }
  *

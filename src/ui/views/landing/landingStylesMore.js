@@ -303,6 +303,10 @@ export const landingStylesMore = css`
   .foot-sky svg { width: 100%; height: 100%; display: block; }
   .foot .tw g { animation: twinkle 3.6s ease-in-out infinite; animation-play-state: paused; transform-box: fill-box; transform-origin: center; }
   .foot[data-live] .tw g { animation-play-state: running; }
+  /* The group itself also takes .tw's twinkle (landingStyles.js): gated the
+     same way, or it ran off-screen for the life of the page (Q-56). */
+  .foot .tw { animation-play-state: paused; }
+  .foot[data-live] .tw { animation-play-state: running; }
   .foot .spk { fill: var(--landing-star); }
   .foot-main { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: clamp(24px, 5vw, 70px); align-items: center; }
   .foot-quill { position: relative; display: flex; flex-direction: column; align-items: center; }

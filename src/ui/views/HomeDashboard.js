@@ -10,7 +10,7 @@ import { brandCopy, brandIcon } from '../components/LookSlots.js';
 import '../components/ModuleHeroCard.js';
 import '../components/PracticeTodayCard.js';
 import { moduleLessonRefs, courseProgress, groupShelf } from '../../core/lessonProgressRules.js';
-import { subjectIcons, iconFlag } from '../icons/uiIcons.js';
+import { subjectIcons, iconFlag, iconShare } from '../icons/uiIcons.js';
 import { ProgressStore } from '../../core/ProgressStore.js';
 import { PracticeTestBuilder } from '../../core/PracticeTestBuilder.js';
 import { btn3dStyles } from '../sharedStyles.js';
@@ -223,7 +223,35 @@ export class HomeDashboard extends LookMixin(GamificationMixin(LitElement)) {
       color: var(--text-muted);
       flex: 1;
     }
+    /* A card's blurb is a short pitch, never a wall: three lines at most. */
+    .card-blurb > span {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+      overflow: hidden;
+    }
 
+    .card-actions { display: inline-flex; align-items: center; gap: var(--space-2); }
+    /* Share on a shelf card (Q-52): a quiet round icon beside Open. */
+    .card-share {
+      width: 36px;
+      height: 36px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+      border-radius: var(--radius-pill);
+      border: var(--rule-w) solid var(--border-color);
+      background: var(--bg-surface);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: color var(--motion-fast) ease, border-color var(--motion-fast) ease;
+    }
+    .card-share:hover { color: var(--primary-text); border-color: var(--primary-color); }
+    .card-share:focus-visible { outline: var(--focus-ring, 3px solid var(--primary-color)); outline-offset: 2px; }
+    .card-share:active { transform: translateY(1px); }
+    :host([data-look="plain"]) .card-share { border-width: 1px; }
     .card-footer {
       display: flex;
       justify-content: space-between;
@@ -247,6 +275,27 @@ export class HomeDashboard extends LookMixin(GamificationMixin(LitElement)) {
       text-align: left;
     }
     .review-link:hover { text-decoration: underline; }
+
+    .shelf-empty {
+      display: flex;
+      align-items: center;
+      gap: var(--space-5, 1.5rem);
+      padding: var(--space-6, 2rem) var(--space-5, 1.5rem);
+      margin: var(--space-4, 1rem) 0 var(--space-6, 2rem);
+      background: var(--bg-surface);
+      border: 2px solid var(--border-color);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-card, none);
+    }
+    .shelf-empty-q { flex: none; }
+    .shelf-empty-text { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2, 0.5rem); min-width: 0; }
+    .shelf-empty h3 { margin: 0; font-family: var(--font-heading); font-size: var(--fs-h3, 1.25rem); color: var(--text-main); }
+    .shelf-empty p { margin: 0 0 var(--space-2, 0.5rem); color: var(--text-muted); }
+    @media (max-width: 480px) {
+      .shelf-empty { flex-direction: column; text-align: center; padding: var(--space-5, 1.5rem) var(--space-4, 1rem); }
+      .shelf-empty-text { align-items: center; }
+    }
+    :host([data-look="plain"]) .shelf-empty { border-width: 1px; box-shadow: none; border-radius: var(--radius-md, 8px); }
 
     .empty-state {
       text-align: center;
@@ -495,6 +544,22 @@ export class HomeDashboard extends LookMixin(GamificationMixin(LitElement)) {
     } catch { this._flagWaiting = 0; }
   }
 
+  /** Empty shelf (a first visit after onboarding): point at Discover.
+   *  Quill look: Quill points at the button; plain: the same card, no mascot. */
+  _renderEmptyShelf() {
+    const quill = this.look !== 'plain';
+    if (quill) import('../components/QuillMascot.js');
+    return html`
+      <section class="shelf-empty" aria-labelledby="shelf-empty-h">
+        ${quill ? html`<quill-mascot class="shelf-empty-q" size="sm" expression="happy" .act=${'point'} rest-after="6000"></quill-mascot>` : ''}
+        <div class="shelf-empty-text">
+          <h3 id="shelf-empty-h">${tr('home.empty_title', 'Your shelf is empty.')}</h3>
+          <p>${tr('home.empty_body', 'Find a course to start.')}</p>
+          <a class="btn-3d btn-primary" href="#/discover">${tr('home.empty_cta', 'Find a course')}</a>
+        </div>
+      </section>`;
+  }
+
   _renderFlagNudge() {
     const n = this._flagWaiting;
     if (!n) return '';
@@ -707,6 +772,17 @@ export class HomeDashboard extends LookMixin(GamificationMixin(LitElement)) {
     return groupShelf(items.filter((i) => i.type === 'module'), (m) => this._bundleOf(m));
   }
 
+  /** Share this course (Q-52), from its shelf card; the card link itself does not open. */
+  async _shareItem(e, item) {
+    e.preventDefault();
+    e.stopPropagation();
+    const bundleId = item.type === 'course' ? item.bundleId : this._bundleOf(item);
+    const first = item.type === 'course' ? item.modules?.[0] : item;
+    const moduleId = first?.id || String(first?.path || '').split('/').pop().replace(/\.json$/i, '') || null;
+    const { shareCourse } = await import('../components/ShareSheet.js');
+    shareCourse({ bundleId, moduleId, title: item.title?.en || item.title || '' });
+  }
+
   /** Where a shelf entry opens: a course page or the module page. */
   _entryHref(item) {
     return item.type === 'course' ? `#/course/${encodeURIComponent(item.bundleId)}` : `#/module/${item.path}`;
@@ -813,6 +889,21 @@ export class HomeDashboard extends LookMixin(GamificationMixin(LitElement)) {
     if (this.look !== 'plain') return '';
     const sub = subject ? String(subject).charAt(0).toUpperCase() + String(subject).slice(1) : '';
     return html`<look-cover seed=${seed || ''} subject=${sub} heading=${heading || ''}></look-cover>`;
+  }
+
+  /**
+   * A shelf card's blurb: the course manifest's description (a course) or
+   * the module's own (a module), clamped to three lines. A course without a
+   * description shows its first part instead, never a list of every title.
+   */
+  _cardBlurb(item) {
+    const text = (d) => (d && typeof d === 'object' ? d.en : d) || '';
+    let blurb = text(item.description);
+    if (!blurb && item.type === 'course') {
+      const first = text(item.modules?.[0]?.title);
+      blurb = first ? `Starts with ${first}` : '';
+    }
+    return html`<p class="card-blurb" title=${blurb}><span>${blurb}</span></p>`;
   }
 
   /** plain: "N lessons" after a card's kind, and a meter in its footer. */
@@ -1032,12 +1123,7 @@ export class HomeDashboard extends LookMixin(GamificationMixin(LitElement)) {
       <practice-today-card .profileId="${this.profileId}"></practice-today-card>
       ${this._renderFlagNudge()}
 
-      ${this._error && !this._catalog.length ? html`
-        <div class="empty-state">
-          <h3>No Content Published Yet</h3>
-          <p>Once authors approve modules and tests, they will appear here automatically.</p>
-        </div>
-      ` : ''}
+      ${Array.isArray(this._catalog) && !this._catalog.length ? this._renderEmptyShelf() : ''}
 
       ${(() => {
         // Renders nothing on a first visit — an empty rail would just be a
@@ -1088,12 +1174,14 @@ export class HomeDashboard extends LookMixin(GamificationMixin(LitElement)) {
                       <div class="card-type">${item.type === 'course' ? `Course \u00b7 ${item.modules.length} parts` : 'Module'}${this._lessonCount(item)}</div>
                       <h3>${item.title?.en || item.title || item.path.split('/').pop().replace('.json', '')}</h3>
                       ${renderTags(item)}
-                      <p>${item.type === 'course'
-                        ? item.modules.map((m) => m.title?.en || m.title).filter(Boolean).join(' \u00b7 ')
-                        : (item.description?.en || item.description || '')}</p>
+                      ${this._cardBlurb(item)}
                       <div class="card-footer">
                         ${this._cardMeter(item) || html`<span style="font-size: 0.8rem; font-weight: var(--fw-medium); color: var(--text-muted);">${brandCopy('cardKind', '')}</span>`}
-                        <span class="btn-3d btn-primary btn-sm">${brandCopy('cardCta', 'Open')}</span>
+                        <span class="card-actions">
+                          <button class="card-share" type="button" aria-label=${`Share ${item.title?.en || item.title || 'this course'}`} title="Share this course"
+                            @click=${(e) => this._shareItem(e, item)}>${iconShare}</button>
+                          <span class="btn-3d btn-primary btn-sm">${brandCopy('cardCta', 'Open')}</span>
+                        </span>
                       </div>
                     </div>
                   </a>

@@ -1,3 +1,4 @@
+import { loadMathlive } from 'core/mathliveConfig.js';
 /**
  * field.js - creates MathLive <math-field> elements imperatively.
  *
@@ -10,7 +11,7 @@ let mathlivePromise = null;
 
 export function loadMathLive() {
   if (!mathlivePromise) {
-    mathlivePromise = import('vendor/mathlive.js').then((m) => {
+    mathlivePromise = loadMathlive().then((m) => {
       try {
         // Our own topic keypad covers the common keys; MathLive's virtual
         // keyboard still shows on touch devices (policy auto) for the rest.

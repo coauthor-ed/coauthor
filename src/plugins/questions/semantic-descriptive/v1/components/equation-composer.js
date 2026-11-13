@@ -1,3 +1,4 @@
+import { loadMathlive } from 'core/mathliveConfig.js';
 import '../../../../../ui/components/LookSlots.js';
 import { LitElement, html, css } from 'lit';
 
@@ -81,7 +82,7 @@ export class SdEquationComposer extends LitElement {
     if (!customElements.get('math-field')) {
       this._loading = true;
       try {
-        await import('vendor/mathlive.js');
+        await loadMathlive();
       } finally {
         this._loading = false;
       }

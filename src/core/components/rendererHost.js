@@ -239,6 +239,12 @@ export function mountRenderer(hostEl, figure, opts = {}) {
       }
       setLabel();
     },
+    /** Narration focus (spec W1 D29n): forwarded to the renderer's optional
+     *  narrationFocus({ narrated, on, held }) (contract figure-host@0, optional). */
+    narrationFocus(st = {}) {
+      if (dead || failed || !handle || typeof handle.narrationFocus !== 'function') return;
+      try { handle.narrationFocus({ narrated: !!st.narrated, on: [...(st.on || [])], held: [...(st.held || [])] }); } catch (err) { fail(err, 'rendererHost.narrationFocus'); }
+    },
     setOptions(o = {}) {
       if (o.look !== undefined) look = o.look === 'plain' ? 'plain' : 'quill';
       if (o.kicker !== undefined) kicker = o.kicker || '';

@@ -9,13 +9,7 @@
  *   await MathRenderer.renderToElement(el, '\\frac{a}{b}', { displayMode: true });
  */
 
-let _mathlive = null;
-
-async function loadMathlive() {
-  if (_mathlive) return _mathlive;
-  _mathlive = await import('vendor/mathlive.js');
-  return _mathlive;
-}
+import { loadMathlive } from '../mathliveConfig.js';
 
 /** Sanitize raw string before handing to MathLive — strip non-LaTeX HTML. */
 function sanitizeLatex(input) {

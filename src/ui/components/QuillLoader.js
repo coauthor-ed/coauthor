@@ -56,6 +56,8 @@ export class QuillLoader extends LitElement {
     .eye { animation: blink 4.2s 1s infinite; }
     @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.1); } }
     @keyframes appear { from { opacity: 0; } }
+    /* Off screen (a placeholder below the fold): nothing to see, so nothing ticks (Q-46). */
+    :host([data-off]) .ring, :host([data-off]) .orbit, :host([data-off]) .pupil, :host([data-off]) .eye { animation-play-state: paused; }
 
     @media (prefers-reduced-motion: reduce) {
       .orbit, .pupil, .eye { animation: none; }
@@ -83,6 +85,16 @@ export class QuillLoader extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     if (!this.hasAttribute('role')) this.setAttribute('role', 'status');
+    if (typeof IntersectionObserver === 'function') {
+      this._io = new IntersectionObserver((es) => this.toggleAttribute('data-off', !es[es.length - 1].isIntersecting));
+      this._io.observe(this);
+    }
+  }
+
+  disconnectedCallback() {
+    this._io?.disconnect();
+    this._io = null;
+    super.disconnectedCallback();
   }
 }
 

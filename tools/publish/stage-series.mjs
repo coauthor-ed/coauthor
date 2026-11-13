@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Stage one series (a future course repo) from several bundle folders. Dry: copies into --out, pushes nothing.
 // Usage: node tools/publish/stage-series.mjs --series <id> --out <dir> --from <bundleDir>... \
-//          [--org ORG-PLACEHOLDER] [--meta series-meta.json] [--link] [--min-free-gb 2]
+//          [--org ORG-PLACEHOLDER] [--base-url https://host] [--meta series-meta.json] [--link] [--min-free-gb 2]
 // series-meta.json: { title, audience, board, grade, subjects[], license, languages[] }  (all optional defaults)
-// Never overwrites a manifest field that already exists. Authoring-only files are skipped (exclude.txt).
+//   plus optional landing fields copied into bundle-manifest.json: description{en}, blurb{en}, highlights[], screenshots[], screencast, cover
+// Never overwrites a manifest field that already exists. Authoring-only files are skipped (exclude.txt; a pattern with "/" is a path from the bundle root).
 // --link hard-links files instead of copying when source and out share a filesystem (manifests are rewritten as new files).
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,14 +23,16 @@ for (let i = 0; i < a.length; i++) {
   if (k === '--series') opt.series = a[++i];
   else if (k === '--out') opt.out = path.resolve(a[++i]);
   else if (k === '--org') opt.org = a[++i];
+  else if (k === '--base-url') opt.baseUrl = a[++i].replace(/\/+$/, '');
   else if (k === '--meta') opt.meta = a[++i];
   else if (k === '--link') opt.link = true;
   else if (k === '--min-free-gb') opt.minFree = Number(a[++i]);
+  else if (k === '--id-map') { const [from, to] = a[++i].split('='); (opt.idMap ||= {})[from] = to; }
   else if (k === '--from') { while (a[i + 1] && !a[i + 1].startsWith('--')) opt.from.push(path.resolve(a[++i])); }
   else { console.error(`Unknown argument ${k}`); process.exit(2); }
 }
 if (!opt.series || !opt.out || !opt.from.length) {
-  console.error('Usage: stage-series.mjs --series <id> --out <dir> --from <bundleDir>... [--org ORG] [--meta file] [--link] [--min-free-gb N]');
+  console.error('Usage: stage-series.mjs --series <id> --out <dir> --from <bundleDir>... [--org ORG] [--meta file] [--id-map old=new] [--link] [--min-free-gb N]');
   process.exit(2);
 }
 const meta = opt.meta ? JSON.parse(fs.readFileSync(opt.meta, 'utf8')) : {};
@@ -37,13 +40,15 @@ const meta = opt.meta ? JSON.parse(fs.readFileSync(opt.meta, 'utf8')) : {};
 // ---- helpers
 const patterns = fs.readFileSync(path.join(HERE, 'exclude.txt'), 'utf8').split('\n').map((s) => s.trim()).filter((s) => s && !s.startsWith('#'));
 const rx = (p) => new RegExp('^' + p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*') + '$');
-const excluders = patterns.map(rx);
-const excluded = (name) => excluders.some((r) => r.test(name));
+// A pattern with "/" matches a path from the bundle root (e.g. story/cast); others match a bare name at any depth.
+const excluders = patterns.filter((p) => !p.includes('/')).map(rx);
+const pathExcluders = patterns.filter((p) => p.includes('/')).map((p) => rx(p.replace(/^\/+|\/+$/g, '')));
+const excluded = (name, rel = name) => excluders.some((r) => r.test(name)) || pathExcluders.some((r) => r.test(rel));
 
 function walk(dir, rel = '', out = []) {
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (excluded(e.name)) continue;
     const r = rel ? `${rel}/${e.name}` : e.name;
+    if (excluded(e.name, r)) continue;
     if (e.isDirectory()) walk(path.join(dir, e.name), r, out);
     else if (e.isFile()) out.push(r);
   }
@@ -108,7 +113,8 @@ const today = new Date().toISOString().slice(0, 10);
 const staged = [];
 const flags = [];
 for (const s of sources) {
-  const id = s.m.bundleId || path.basename(s.dir);
+  let id = s.m.bundleId || path.basename(s.dir);
+  if (opt.idMap && opt.idMap[id]) { id = opt.idMap[id]; s.m = { ...s.m, bundleId: id }; }
   const dest = path.join(opt.out, id);
   if (fs.existsSync(dest)) { console.error(`Duplicate bundleId ${id}`); process.exit(2); }
   for (const f of s.files) {
@@ -144,6 +150,7 @@ for (const s of sources) {
 const bm = {
   bundleManifestId: opt.series,
   title: { en: meta.title || opt.series },
+  ...Object.fromEntries(['description', 'blurb', 'highlights', 'screenshots', 'screencast', 'cover'].filter((k) => meta[k] !== undefined).map((k) => [k, meta[k]])),
   sources: staged.map((b) => ({ manifestUrl: `${b.id}/manifest.json` })),
 };
 writeFresh(path.join(opt.out, 'bundle-manifest.json'), JSON.stringify(bm, null, 2) + '\n');
@@ -154,11 +161,12 @@ for (const f of ['engineVersion.js', 'ErrorReporter.js']) {
   fs.mkdirSync(path.join(opt.out, 'src/core'), { recursive: true });
   fs.copyFileSync(path.join(ENGINE, 'src/core', f), path.join(opt.out, 'src/core', f));
 }
-fs.mkdirSync(path.join(opt.out, '.github/workflows'), { recursive: true });
-fs.copyFileSync(path.join(HERE, 'course-repo-pages.yml'), path.join(opt.out, '.github/workflows/pages.yml'));
+// No CI files: the staged folder is the finished static site (Q-72). .nojekyll is for GitHub Pages; _headers gives
+// Netlify/Cloudflare the CORS header the app needs to fetch courses cross-origin (nginx/Apache: see the publishing runbook).
 fs.writeFileSync(path.join(opt.out, '.nojekyll'), '');
+fs.writeFileSync(path.join(opt.out, '_headers'), '/*\n  Access-Control-Allow-Origin: *\n');
 
-const site = `https://${opt.org}.github.io`;
+const site = opt.baseUrl || `https://${opt.org}.github.io`;
 const seriesUrl = `${site}/${opt.series}/bundle-manifest.json`;
 const licenses = [...new Set(staged.map((b) => b.license))].join(', ');
 fs.writeFileSync(path.join(opt.out, 'README.md'), [
@@ -199,3 +207,4 @@ const total = sizeOf(all, opt.out);
 console.log(`TOTAL ${fmtMB(total)}${useLink ? ' (hard-linked, no extra disk)' : ''}  bundles=${staged.length}  integrity=${fail ? fail + ' FAIL' : 'all PASS'}`);
 if (total > WARN_MB * 1048576) console.warn(`WARN over ${WARN_MB} MB; the Pages site cap is 1 GB. Split this series.`);
 for (const f of flags) console.warn('FLAG ' + f);
+if (fail || r.status !== 0) process.exitCode = 1;  // stage-all.sh runs with set -e: a failing bundle stops the staging

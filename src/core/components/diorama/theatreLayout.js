@@ -40,10 +40,12 @@ export function readRange(span, rem = 16) {
  * 40% (and a usable minimum) plus its window's chrome, whatever the beat or
  * the learner's drag.
  */
-export function splitLimits({ tall, span, rem = 16, reserve = 0 }) {
+export function splitLimits({ tall, span, rem = 16, reserve = 0, sceneFloor = 0 }) {
   // reserve: the scene window's own chrome (head strip, controls bar), which
-  // must not eat into the scene's minimum.
-  const minScene = (tall ? Math.max(150, span * 0.4) : Math.max(260, span * 0.4)) + reserve;
+  // must not eat into the scene's minimum. sceneFloor (Q-84, docked tall): the
+  // scene's own full-width length, so long beat text scrolls in its pane
+  // instead of squeezing the scene narrow (capped by the caller).
+  const minScene = Math.max((tall ? Math.max(150, span * 0.4) : Math.max(260, span * 0.4)) + reserve, sceneFloor);
   const r = readRange(span, rem);
   const min = tall ? 70 : r.min;
   // ...but in a small box with a big controls bar the story still keeps 30%.

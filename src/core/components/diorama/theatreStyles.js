@@ -52,8 +52,16 @@ export const theatreStyles = css`
 
   /* the narrator, compact inside the theatre (same as the old fit-scene) */
   .th .story-title { font-size: 0.85em; margin-bottom: 4px; padding-right: 44px; }
-  .th .story-quill-row { margin-bottom: -12px; }
+  /* padding-top: room for the speaker's bob, which the pane's own scroll box
+     would otherwise clip (the head cut off at the top of each bounce). */
+  .th .story-quill-row { margin-bottom: -12px; padding-top: 10px; }
   .th .story-quill > * { width: 56px; }
+  /* A speaker on the right stands clear of the undock button (.th-pop). */
+  .th .story-quill-row.speaker-right { padding-right: 44px; }
+  /* A narration caption has no row above it, so it starts level with that
+     button: keep its corner clear too (a floating story card has none). */
+  .th .story-bubble.story-caption { margin-right: 40px; }
+  .th .th-narr.floating .story-bubble.story-caption { margin-right: 0; }
   .th .story-quill-name { font-size: 0.64rem; padding: 4px 10px; margin-bottom: 8px; }
   .th .story-bubble { padding: 13px 16px; }
   .th .story-bubble::before { display: none; }
@@ -64,6 +72,12 @@ export const theatreStyles = css`
   .th.float-scene:not(.max) .story-quill-name { font-size: 0.8rem; padding: 5px 14px; margin-bottom: 12px; }
   .th.float-scene:not(.max) .story-quill-row { margin-bottom: -6px; }
   .th.float-scene:not(.max) .story-bubble::before { display: block; }
+  .th.float-scene:not(.max) .story-bubble.story-caption::before { display: none; }
+  /* Desktop: the speaker grows with the viewport (phone sizes unchanged). */
+  @media (min-width: 1024px) {
+    .th .story-quill > * { width: clamp(56px, min(6.5vw, 12dvh), 112px); }
+    .th.float-scene:not(.max) .story-quill > * { width: clamp(84px, min(9vw, 16dvh), 150px); }
+  }
 
   /* undock-the-story button, top right of the docked story */
   .th-pop {
@@ -301,7 +315,7 @@ export const theatreStyles = css`
     width: 100%;
     height: 100%;
   }
-  .th-cam-in .sim-host-container canvas { width: 100% !important; height: auto !important; display: block; }
+  .th-cam-in .sim-host-container canvas:not([data-sim-own-size]):not(.sim-dom-root canvas[style*="width"], .sim-dom-root canvas[style*="height"]) { width: 100% !important; height: auto !important; display: block; }
   .th-cam-in .sim-host-container .sim-dom-root { line-height: normal; }
 
   /* chip: what the camera is showing, only while zoomed */

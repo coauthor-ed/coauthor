@@ -6,6 +6,8 @@
  * used only to derive repository.issues for a github.io-hosted course.
  */
 const AUDIENCES = ['school', 'college', 'adult'];
+/** manifest `narration.preferredMode` (Q-90): the mode a narrated lesson opens in first. */
+export const NARRATION_MODES = ['narrated', 'text'];
 
 const str = (v) => (typeof v === 'string' && v.trim() ? v.trim() : '');
 const strList = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim()) : []);
@@ -45,6 +47,7 @@ export function readCourseMeta(manifest, sourceUrl = '') {
     version: str(m.version),
     updatedAt: str(m.updatedAt),
     showcase: (typeof m.showcase === 'string' || (m.showcase && typeof m.showcase === 'object' && !Array.isArray(m.showcase))) ? m.showcase : '', // path to showcase.json, or the inline object the kit writes
+    narration: { preferredMode: NARRATION_MODES.includes(m.narration?.preferredMode) ? m.narration.preferredMode : '' },
     requires: { engine: str(m.requires?.engine) || (Number.isFinite(m.requires?.engine) ? String(m.requires.engine) : '') },
   };
 }

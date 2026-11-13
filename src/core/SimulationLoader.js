@@ -66,7 +66,11 @@ export const SimulationLoader = {
       const importPath = isPreview
         ? `${resolvedPath}${resolvedPath.includes('?') ? '&' : '?'}_previewTs=${Date.now()}`
         : resolvedPath;
-      SimulationLoader._modules.set(resolvedPath, import(/* webpackIgnore: true */ importPath));
+      // A failed import (a network drop, offline before it was cached) is
+      // forgotten, so the next attempt can load it once the file is there.
+      const p = import(/* webpackIgnore: true */ importPath);
+      p.catch(() => { if (SimulationLoader._modules.get(resolvedPath) === p) SimulationLoader._modules.delete(resolvedPath); });
+      SimulationLoader._modules.set(resolvedPath, p);
     }
     return SimulationLoader._modules.get(resolvedPath);
   },

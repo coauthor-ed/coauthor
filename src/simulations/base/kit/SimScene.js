@@ -14,8 +14,10 @@
  *                          returns true when the control bar needs a refresh
  *
  * Statics: WIDTH/HEIGHT (680x520, SimLook W/H), HIDPI (true: the backing store
- * is devicePixelRatio x the design size, capped at 2, with a matching base
- * transform, so text and edges stay crisp on phones; draw in design px as
+ * matches the device pixels the canvas is SHOWN at (shown width x devicePixelRatio),
+ * between 1x and 2x the design size, re-fitted when the box resizes, with a
+ * matching base transform, so text and edges stay crisp on phones without
+ * drawing 3x the pixels a small box shows; draw in design px as
  * always and never reset the transform), DRAGGABLE (stops page scroll
  * under a finger; default null = on when the scene overrides pointerDown), CONTINUOUS = false, BEAT_STEP_MAP, optional
  * BEAT_MAPS = { [beatCount]: map } for a scene attached to slides with
@@ -29,6 +31,11 @@
  * ('line' default: one muted line along the bottom, on that stage and every
  * later one, never covering the scene; 'card': the modal card, on that stage
  * only, for a stage the learner does not touch), NOTE_TITLE (card badge text).
+ *
+ * Portrait: this.portrait is true on a portrait screen (the lesson host's viewport
+ * orientation, live; else config.isPortrait). The canvas keeps one frame
+ * (WIDTH x HEIGHT, no PORTRAIT_* for canvas); lay out inside it for a narrow
+ * read (stack, transpose, bigger type). this.config is the host config.
  *
  * Helpers: this.colors (loadColors), this.stage / age / clock (read-only),
  * this.beatCount, after(seconds, fn), _guard(id), and the juice:
@@ -60,7 +67,7 @@
  *
  * Reserved names - do not declare fields or methods with these names in a
  * subclass (a collision breaks parking, starting or stage changes silently):
- *   this class:  _k (all private state lives in this one holder), _guard, _tick,
+ *   this class:  _k (all private state lives in this one holder), _guard, _tick, config, portrait,
  *                _drawInitialFrame, _reloadColors, colors, beatCount, stage, age,
  *                clock, after, celebrate, oops, shake, flash, floatText, and
  *                the hooks above
@@ -103,6 +110,8 @@ export class SimScene extends CanvasSimulation {
 
   constructor(container, config) {
     super(container, config);
+    // CanvasSimulation does not pass the host config on; keep it (isPortrait, glossaryTerm, ...).
+    this.config = config || {};
     this.allowResume = true;
     this.colors = null;
     this.beatCount = 0;
@@ -130,12 +139,12 @@ export class SimScene extends CanvasSimulation {
     const cv = this._canvas;
     const k = this._k;
     const C = this.constructor;
-    const dpr = C.HIDPI ? Math.min(2, Math.max(1, Number(globalThis.devicePixelRatio) || 1)) : 1;
-    k.dpr = dpr;
-    if (dpr > 1 && cv) {
-      cv.width = Math.round(C.WIDTH * dpr);
-      cv.height = Math.round(C.HEIGHT * dpr);
-      this._ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    k.dpr = 1;
+    fitBackingStore(this);
+    // Re-fit when the shown box changes size (rotation, side panel, window resize).
+    if (C.HIDPI && cv && typeof ResizeObserver === 'function') {
+      k.ro = new ResizeObserver(() => { if (fitBackingStore(this) && this.colors) drawFrame(this, this._ctx); });
+      k.ro.observe(cv);
     }
     const drag = C.DRAGGABLE ?? (this.pointerDown !== SimScene.prototype.pointerDown);
     if (drag) cv.style.touchAction = 'none';
@@ -143,8 +152,23 @@ export class SimScene extends CanvasSimulation {
     cv.addEventListener('pointermove', k.onMove);
     cv.addEventListener('pointerup', k.onUp);
     cv.addEventListener('pointercancel', k.onUp);
+    // Portrait: the lesson host follows the viewport's orientation; a rotation redraws the frame.
+    if (this.config.orientationFollowsViewport && typeof matchMedia === 'function') {
+      k.mqPortrait = matchMedia('(orientation: portrait)');
+      k.onPortrait = () => { if (this.colors) drawFrame(this, this._ctx); this.animateFor?.(); this.requestUiUpdate?.(); };
+      k.mqPortrait.addEventListener?.('change', k.onPortrait);
+    }
     enterStage(this, mapFor(this, this.beatCount)?.[0]?.[0]?.idx ?? 0);
     this._drawInitialFrame(this._ctx);
+  }
+
+  /** True on a portrait screen: the lesson host's viewport orientation (live), else
+   *  config.isPortrait (question panels, the kit harness with --portrait), else false.
+   *  The frame keeps WIDTH x HEIGHT; lay out inside it for a narrow read. */
+  get portrait() {
+    const mq = this._k.mqPortrait;
+    if (mq) return mq.matches;
+    return this.config?.isPortrait === true;
   }
 
   destroy() {
@@ -156,6 +180,10 @@ export class SimScene extends CanvasSimulation {
       cv.removeEventListener('pointerup', k.onUp);
       cv.removeEventListener('pointercancel', k.onUp);
     }
+    k.ro?.disconnect();
+    k.ro = null;
+    k.mqPortrait?.removeEventListener?.('change', k.onPortrait);
+    k.mqPortrait = null;
     k.timers = [];
     super.destroy();
   }
@@ -339,6 +367,37 @@ function runTimers(scene) {
   scene.requestUiUpdate?.();
 }
 
+/**
+ * Backing store = the device pixels the canvas is shown at, between 1x and
+ * 2x the design size (Q-46: a 680-wide scene shown 264 px wide on a 3x phone
+ * drew 1360 x 1040 = 2.9x the pixels on screen). Before layout (width 0) it
+ * falls back to min(2, devicePixelRatio). Returns true when the size changed
+ * (the canvas is then blank and needs a frame).
+ */
+function fitBackingStore(scene) {
+  const cv = scene._canvas;
+  const C = scene.constructor;
+  const k = scene._k;
+  if (!cv || !scene._ctx) return false;
+  const real = Math.max(1, Number(globalThis.devicePixelRatio) || 1);
+  const cap = C.HIDPI ? Math.min(2, real) : 1;
+  const shown = cv.clientWidth;
+  if (!shown && k.fitted) return false;   // hidden (display: none): keep the last fit
+  let s = cap;
+  if (C.HIDPI && shown > 0) s = Math.min(cap, Math.max(1, (shown * real) / C.WIDTH));
+  const w = Math.round(C.WIDTH * s);
+  const h = Math.round(C.HEIGHT * s);
+  if (cv.width === w && cv.height === h) { k.dpr = w / C.WIDTH; return false; }
+  // Ignore tiny jitters (a scrollbar, sub-pixel layout): only re-fit on a 4 percent change.
+  if (k.fitted && Math.abs(w - cv.width) / cv.width < 0.04) return false;
+  k.fitted = true;
+  k.dpr = w / C.WIDTH;
+  cv.width = w;
+  cv.height = h;
+  scene._ctx.setTransform(k.dpr, 0, 0, k.dpr, 0, 0);
+  return true;
+}
+
 function drawFrame(scene, ctx) {
   const C0 = scene.constructor;
   setFrame(C0.WIDTH, C0.HEIGHT);   // the full-canvas SimLook helpers paint THIS scene's frame, not the 680 x 520 default
@@ -353,7 +412,7 @@ function drawFrameInner(scene, ctx) {
   const c = scene.colors;
   const C = scene.constructor;
   const w = C.WIDTH, h = C.HEIGHT;
-  if (k.dpr > 1) ctx.setTransform(k.dpr, 0, 0, k.dpr, 0, 0);
+  if (k.dpr !== 1) ctx.setTransform(k.dpr, 0, 0, k.dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
   ctx.save();
   if (k.shake > 0) ctx.translate(Math.sin(k.clock * 61) * k.shake, Math.cos(k.clock * 47) * k.shake * 0.6);

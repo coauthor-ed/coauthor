@@ -83,7 +83,7 @@ export async function loadLessonPool(lessonRows, deps = {}) {
     } catch { continue; }
     const topicId = lesson?.topicIds?.[0] ?? lesson?.topicId ?? null;
     for (const b of lesson?.blocks || []) {
-      const ref = b?.blockRef;
+      const ref = typeof b === 'string' ? b : b?.blockRef;
       if (!ref) continue;
       const key = keyOf(row.bundleId, ref);
       if (seen.has(key)) continue;

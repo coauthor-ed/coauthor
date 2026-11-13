@@ -5,6 +5,8 @@
 // requires.engine is newer than this engine.
 import { ENGINE_VERSION, satisfies } from '../../src/core/engineVersion.js';
 import { isBundleRelative } from '../../src/core/cast/castData.js';
+import { safeAssetPath, IMG_RX, VID_RX } from '../../src/core/showcaseMeta.js';
+import { NARRATION_MODES } from '../../src/core/courseMeta.js';
 
 const AUDIENCES = ['school', 'college', 'adult'];
 const FEATURES = ['story', 'narration', 'games', 'practice'];
@@ -52,9 +54,40 @@ export function validateManifest(data) {
   if (has('updatedAt') && !(isStr(data.updatedAt) && /^\d{4}-\d{2}-\d{2}/.test(data.updatedAt) && !Number.isNaN(Date.parse(data.updatedAt)))) bad('updatedAt', 'an ISO date such as "2026-11-01"');
   // `showcase` is a path string in v1; the older object form (cover, tagline) is still read by Discover.
   if (has('showcase') && !isStr(data.showcase) && !isObj(data.showcase)) bad('showcase', 'a bundle-relative path to showcase.json');
+  // Store-page fields (Discover Q-47, landing pages Q-53; src/core/showcaseMeta.js). All optional.
+  const relImg = (v) => safeAssetPath(v, IMG_RX);
+  if (has('blurb')) {
+    if (!(isObj(data.blurb) && isStr(data.blurb.en))) bad('blurb', '{ "en": "one line" }');
+    else if (data.blurb.en.length > 120) warnings.push(`blurb is ${data.blurb.en.length} characters; keep it to one line, about 90`);
+  }
+  if (has('highlights')) {
+    if (!Array.isArray(data.highlights) || !data.highlights.every((h) => isObj(h) && isStr(h.en))) bad('highlights', 'an array of { "en": "..." }');
+    else if (data.highlights.length > 6) warnings.push(`highlights has ${data.highlights.length} items; 3 to 5 read best`);
+  }
+  if (has('screenshots')) {
+    if (!Array.isArray(data.screenshots)) bad('screenshots', 'an array of bundle-relative image paths');
+    else data.screenshots.forEach((s, i) => {
+      const src = typeof s === 'string' ? s : (isObj(s) ? s.src : null);
+      if (!relImg(src)) errors.push(`Invalid screenshots[${i}]: ${JSON.stringify(s)} (a bundle-relative .jpg/.png/.webp path, or { src, caption })`);
+    });
+  }
+  if (has('screencast')) {
+    const sc = data.screencast;
+    const src = typeof sc === 'string' ? sc : (isObj(sc) ? sc.src : null);
+    if (!safeAssetPath(src, VID_RX)) bad('screencast', 'a bundle-relative .mp4/.webm path, or { src, poster }');
+    else if (isObj(sc) && 'poster' in sc && !relImg(sc.poster)) errors.push(`Invalid screencast.poster: ${JSON.stringify(sc.poster)} (a bundle-relative image path)`);
+  }
+  if (has('cover') && !relImg(data.cover)) bad('cover', 'a bundle-relative .jpg/.png/.webp path');
+  if (has('sizeMB') && !(Number.isFinite(data.sizeMB) && data.sizeMB >= 0)) bad('sizeMB', 'a number of megabytes, 0 or more');
   // `cast` (story cast, docs/content-authoring-guide.md "Story cast"): a
   // bundle-relative path to cast.json; its contents are checked by cast.js.
   if (has('cast') && !(isBundleRelative(data.cast) && /\.json$/i.test(data.cast))) bad('cast', 'a bundle-relative path to cast.json, such as "story/cast.json"');
+  // `narration` (Q-90): the mode a narrated lesson of this course opens in
+  // until the learner picks one in this course.
+  if (has('narration')) {
+    if (!isObj(data.narration)) bad('narration', '{ "preferredMode": "narrated" | "text" }');
+    else if ('preferredMode' in data.narration && !NARRATION_MODES.includes(data.narration.preferredMode)) errors.push(`Invalid narration.preferredMode: ${JSON.stringify(data.narration.preferredMode)} (one of ${NARRATION_MODES.join(', ')})`);
+  }
   if (has('requires')) {
     if (!isObj(data.requires)) bad('requires', '{ "engine": "1.0" }');
     else if ('engine' in data.requires) {

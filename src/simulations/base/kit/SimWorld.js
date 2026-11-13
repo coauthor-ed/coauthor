@@ -12,7 +12,17 @@
  */
 // The setting assets resolve next to this module (absolute, so the CSS works inside any shadow root).
 const PAPER_GRAIN = new URL('./paper/grain.svg', import.meta.url).href;
-const SET = (name) => new URL(`./paper/${name}.svg`, import.meta.url).href;
+// Each one written out in full (not built from its name) so the offline
+// prefetcher, which reads module source for new URL(...) assets, caches them.
+const SETS = {
+  stars: new URL('./paper/stars.svg', import.meta.url).href,
+  hills: new URL('./paper/hills.svg', import.meta.url).href,
+  field: new URL('./paper/field.svg', import.meta.url).href,
+  caustics: new URL('./paper/caustics.svg', import.meta.url).href,
+  sand: new URL('./paper/sand.svg', import.meta.url).href,
+  parchment: new URL('./paper/parchment.svg', import.meta.url).href,
+};
+const SET = (name) => SETS[name] || new URL(`./paper/${name}.svg`, import.meta.url).href;
 
 export const SIM_WORLD_CSS = `
 .sl-world { position: absolute; inset: 0; z-index: 0; pointer-events: none; }

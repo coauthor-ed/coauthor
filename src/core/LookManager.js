@@ -53,8 +53,9 @@ import { ThemeManager } from './ThemeManager.js';
  *   data-accent while the course is open (setCourse(), followBundle()) and
  *   removed on leaving. Only look css keys on it; Quill ignores it.
  * - A look's registry "theme" ('light' | 'dark', default dark) is the theme
- *   shown while the learner has never used the theme toggle
- *   (ThemeManager.applyLookDefault()); plain is light.
+ *   shown only while the theme follows the device and the browser reports
+ *   no prefers-color-scheme (ThemeManager.applyLookDefault(), Q-66); plain
+ *   is light.
  * - Student runtime only: never call init() from the authoring app (#aa-shell,
  *   invariant 10).
  * - A course's story cast (bundle manifest `"cast": "story/cast.json"`,
@@ -342,7 +343,7 @@ function apply() {
     ensureCss(_looks[look]);
     if (typeof document !== 'undefined') document.documentElement.setAttribute('data-look', look);
     // The look's default theme (registry "theme": plain light, others dark),
-    // only while the learner has not picked one with the toggle.
+    // only where the browser reports no prefers-color-scheme (Q-66).
     ThemeManager.applyLookDefault(_looks[look]?.theme);
     EventBus.emit('look:changed', { look });
   }

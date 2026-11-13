@@ -138,6 +138,29 @@ export const ProgressiveDisclosureMixin = (superClass) => class extends superCla
     // exactly today's behavior when absent/returns nothing.
     const block = this._scrollBeatBlockAlign?.(fits) || (fits ? 'center' : 'end');
     el.scrollIntoView({ behavior, block, inline: 'nearest' });
+    if (block === 'start') this._recheckBeatScroll(el, headerH);
+  }
+
+  /** A start-aligned beat (a stacked scene under it) is re-placed once the
+   *  slide settles (Q-84): the scene mounting, fonts and the session's own
+   *  slide scroll could leave a later beat's scene 650-750 px down a 844 px
+   *  phone. Never after the learner scrolls, taps or presses a key. */
+  _recheckBeatScroll(el, headerH) {
+    clearTimeout(this._beatRecheckT);
+    this._beatRecheckOff?.();
+    let moved = false;
+    const mark = () => { moved = true; };
+    const evs = ['wheel', 'touchstart', 'pointerdown', 'keydown'];
+    evs.forEach((e) => window.addEventListener(e, mark, { passive: true, capture: true }));
+    this._beatRecheckOff = () => { evs.forEach((e) => window.removeEventListener(e, mark, { capture: true })); this._beatRecheckOff = null; };
+    this._beatRecheckT = setTimeout(() => {
+      this._beatRecheckOff?.();
+      if (moved || document.hidden || !el.isConnected || !el.classList.contains('rv-current')) return;
+      const top = el.getBoundingClientRect().top;
+      // Only a beat left too low (the scroll fell short) is re-placed. A beat
+      // above its place was scrolled on by something else; leave it there.
+      if (top - (headerH + 12) > 24) el.scrollIntoView({ behavior: 'auto', block: 'start', inline: 'nearest' });
+    }, 900);
   }
 
   /**

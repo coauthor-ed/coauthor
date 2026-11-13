@@ -6,6 +6,7 @@ import { ThemeManager } from '../core/ThemeManager.js';
 import { CourseSourceManager } from '../core/CourseSourceManager.js';
 import { DeviceIdentity } from '../core/DeviceIdentity.js';
 import { AssetPrefetcher } from '../core/AssetPrefetcher.js';
+import { OfflinePrefetcher } from '../core/OfflinePrefetcher.js';
 import { LoadingIndicator } from '../core/LoadingIndicator.js';
 import { GamificationService } from '../core/GamificationService.js';
 import { EventBus } from '../core/EventBus.js';
@@ -20,8 +21,15 @@ import './components/ToastZone.js';
 import './components/LookSlots.js';
 import './components/GuideHelp.js';
 import { answerPageQueries } from '../core/components/stageAnswer.js';
+import { needsNudge, markDiscoverSeen } from '../core/discoverNudge.js';
 
 // Story's fireflies: fixed random positions/paths, generated once.
+// Pages that show no lesson, where the lesson engine may warm in the
+// background (Q-56), and how long after their first paint that may start
+// (the page's own images and data go first).
+const BROWSE_ROUTES = new Set(['home', 'module-dashboard', 'course-dashboard']);
+const ENGINE_WARM_DELAY_MS = 1500;
+
 const FIREFLIES = Array.from({ length: 9 }, () => html`<i style="${[
   `left:${(Math.random() * 100).toFixed(1)}%`,
   `top:${(12 + Math.random() * 76).toFixed(1)}%`,
@@ -86,6 +94,14 @@ export class AppShell extends LitElement {
     @media (prefers-reduced-motion: reduce) { .fireflies { display: none; } }
 
     header, main { position: relative; z-index: 1; }
+    /* Narrated lesson, learner only listening (spec W1 D29n): the header steps
+       back; hover, focus or any touch (which ends calm) brings it back.
+       Q-88: only the bar's contents fade, never the bar itself. The bar is
+       sticky over the page, so fading its background let a phone's scrolled
+       content (the plain slide head) show through it. */
+    header > * { transition: opacity 420ms ease-out; }
+    :host([data-narr-calm]) header:not(:hover):not(:focus-within) > * { opacity: 0.12; }
+    @media (prefers-reduced-motion: reduce) { header > * { transition: none; } }
     /* main is a stacking context, and a lesson's position:fixed bottom bar /
        turn-nav lives inside it, so the bar paints at main's level. Nothing
        after main may share that level (a footer used to, and covered the bar
@@ -333,6 +349,29 @@ export class AppShell extends LitElement {
     @media (max-width: 480px) {
       nav a.in-menu-narrow { display: none; }
     }
+    /* Empty shelf: a soft ring pulses on Discover until the profile adds a
+       course or opens Discover once (core/discoverNudge.js). Below 480px the
+       profile menu carries the same mark. Reduced motion: a still dot. */
+    nav a.nudge { position: relative; }
+    nav a.nudge::after {
+      content: '';
+      position: absolute;
+      top: 4px;
+      right: 4px;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--nudge-dot, var(--accent-coral));
+      box-shadow: 0 0 0 2px var(--appbar-bg, var(--bg-base));
+      animation: nudge-pulse 1.8s ease-out infinite;
+    }
+    @keyframes nudge-pulse {
+      0% { box-shadow: 0 0 0 2px var(--appbar-bg, var(--bg-base)), 0 0 0 2px color-mix(in srgb, var(--nudge-dot, var(--accent-coral)) 55%, transparent); }
+      70%, 100% { box-shadow: 0 0 0 2px var(--appbar-bg, var(--bg-base)), 0 0 0 11px color-mix(in srgb, var(--nudge-dot, var(--accent-coral)) 0%, transparent); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      nav a.nudge::after { animation: none; }
+    }
     @media (max-width: 350px) {
       .theme-btn { display: none; }
     }
@@ -377,6 +416,8 @@ export class AppShell extends LitElement {
     _modeForced: { type: Boolean, state: true },
     // A site route (the landing page, the guides) owns the whole page: no app bar.
     _site: { type: Boolean, state: true },
+    // Empty shelf and Discover never opened (per profile): the nav marks Discover.
+    _discoverNudge: { type: Boolean, state: true },
     // A guide opened over a lesson or test ('guide:open'), so the student
     // keeps their place. { slug, h } or null.
     _sheet: { type: Object, state: true },
@@ -397,6 +438,8 @@ export class AppShell extends LitElement {
     EventBus.on('lesson:header-nav', (state) => {
       this._headerNav = { ...this._headerNav, ...state };
       this.toggleAttribute('data-lesson-nav', this._headerNav.active);
+      // Narrated and only listening (LessonSession _setNarrCalm): the header fades back.
+      this.toggleAttribute('data-narr-calm', !!(this._headerNav.active && this._headerNav.narrated && this._headerNav.calm));
       this._updateAppbarOffset();
     });
 
@@ -441,10 +484,11 @@ export class AppShell extends LitElement {
     GamificationService.start(() => this.currentUser?.profileId || this.currentUser?.id || null);
 
     // Init theme
-    let savedTheme = 'dark';
-    try { savedTheme = localStorage.getItem('coauthor-theme') || 'dark'; } catch { /* storage off */ }
-    document.documentElement.setAttribute('data-theme', savedTheme);
-    this._theme = savedTheme;
+    // Q-66: follows the device unless the learner chose light or dark
+    // (ThemeManager.js; themeBoot.js already set it before first paint).
+    ThemeManager.init();
+    this._theme = ThemeManager.getTheme() || 'dark';
+    EventBus.on('theme-pref:changed', () => this.requestUpdate());
     // Mirrored on the host so shadow styles can key on it (no :host-context);
     // the first write happens in connectedCallback (a custom element may not
     // set attributes in its constructor).
@@ -490,6 +534,7 @@ export class AppShell extends LitElement {
     // for a guide over EventBus, never by reaching into this shell
     // (invariant 4). Inside a lesson, a test or the parent area it opens as a
     // sheet, so nobody loses their place; anywhere else it is a normal page.
+    EventBus.on('discover:nudge', ({ on } = {}) => { if (on === false) this._discoverNudge = false; });
     EventBus.on('guide:open', ({ slug, h } = {}) => {
       if (!slug) return;
       // The parent area too: leaving it would lock it again behind the gate.
@@ -580,7 +625,10 @@ export class AppShell extends LitElement {
     // Site routes (the landing page, the guides, profile setup) draw their
     // own full-page layout and top bar, and are reachable before and after
     // onboarding (docs/sprints/completed/landing-page-and-guides.md).
-    const SITE_ROUTES = ['landing-view', 'guides-index', 'guide-view', 'onboarding-flow'];
+    // add-course (#/add, Q-53b) is one too: a first-time visitor from a shared
+    // link sees the course before any profile exists; it sends them through
+    // onboarding itself when they say yes, then resumes.
+    const SITE_ROUTES = ['landing-view', 'guides-index', 'guide-view', 'onboarding-flow', 'add-course'];
     const onboardingComplete = await ProgressStore.get('meta', 'onboarding_complete');
     const onboarded = !!onboardingComplete?.value;
     // "Start learning" always points at #/start; someone who already has a
@@ -605,7 +653,10 @@ export class AppShell extends LitElement {
       return;
     }
     if (this._site) {
-      if (view === 'landing-view') {
+      if (view === 'add-course') {
+        await import('./views/AddCourseView.js');
+        this.currentView = html`<add-course-view .src=${params.src || ''} .moduleId=${params.module || ''} .onboarded=${onboarded}></add-course-view>`;
+      } else if (view === 'landing-view') {
         await import('./views/LandingView.js');
         this.currentView = html`<landing-view .returning=${onboarded}></landing-view>`;
       } else if (view === 'guides-index') {
@@ -666,17 +717,48 @@ export class AppShell extends LitElement {
       this.currentView = html`<home-dashboard .userName="${user.name}" .adult="${AuthService.isAdult(user)}" .profileId="${activeProfileId}"></home-dashboard>`;
     } else if (route === 'discover-view') {
       await import('./views/DiscoverView.js');
-      this.currentView = html`<discover-view .profileId="${activeProfileId}"></discover-view>`;
+      this.currentView = html`<discover-view .profileId="${activeProfileId}" .sub="${params.id || ''}"></discover-view>`;
     } else {
       this.currentView = html`<div>Current Route: ${route}</div>`;
     }
     
     this.requestUpdate();
+    if (BROWSE_ROUTES.has(route) && !isPreview) this._scheduleEngineWarm();
+    this._refreshDiscoverNudge(activeProfileId, route === 'discover-view');
+  }
+
+  /** Re-asks on every app route: an add from anywhere clears the dot on the next page. */
+  async _refreshDiscoverNudge(profileId, onDiscover) {
+    this._nudgeProfile = profileId;
+    if (onDiscover) await markDiscoverSeen(profileId);
+    const on = await needsNudge(profileId);
+    if (this._nudgeProfile === profileId) this._discoverNudge = on;
+  }
+
+  /**
+   * Q-56: while the learner looks at home or a module page, the lesson
+   * engine's code downloads in the background (OfflinePrefetcher), so the
+   * first lesson open does not wait for it on a slow connection. Starts
+   * after the page has painted, a moment later and when the browser is
+   * idle; stops starting requests once the learner leaves for a lesson.
+   */
+  _scheduleEngineWarm() {
+    if (this._warmTimer) return;
+    this.updateComplete.then(() => requestAnimationFrame(() => {
+      this._warmTimer = setTimeout(() => {
+        const go = () => {
+          this._warmTimer = null;
+          if (!BROWSE_ROUTES.has(this._route)) return;
+          OfflinePrefetcher.warmLessonEngine({ wanted: () => BROWSE_ROUTES.has(this._route) });
+        };
+        if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(go, { timeout: 4000 });
+        else go();
+      }, ENGINE_WARM_DELAY_MS);
+    }));
   }
 
   toggleTheme(e) {
-    const next = ThemeManager.getTheme() === 'light' ? 'dark' : 'light';
-    ThemeManager.setTheme(next);
+    ThemeManager.toggle();
     this._spin(e?.currentTarget);
   }
 
@@ -870,11 +952,11 @@ export class AppShell extends LitElement {
             </div>
           ` : ''}
           <a href="#/" aria-label="Home" title="Home">${iconHome}<span class="nav-label">Home</span></a>
-          <a class="in-menu-narrow" href="#/discover" aria-label="Discover" title="Discover courses">${iconSearch}<span class="nav-label">Discover</span></a>
+          <a class="in-menu-narrow ${this._discoverNudge ? 'nudge' : ''}" href="#/discover" aria-label="${this._discoverNudge ? 'Discover: find your first course' : 'Discover'}" title="Discover courses">${iconSearch}<span class="nav-label">Discover</span></a>
           <a class="in-menu-narrow" href="#/guides" aria-label="Guides" title="Guides">${iconGuide}<span class="nav-label">Guides</span></a>
           <!-- The student menu (name pill) carries the Parent area link for
                every role, so there is no separate header link to duplicate it. -->
-          <profile-switcher></profile-switcher>
+          <profile-switcher .nudge=${!!this._discoverNudge}></profile-switcher>
           ${this._modeForced ? '' : html`
             <button
               class="icon-btn"
@@ -889,7 +971,7 @@ export class AppShell extends LitElement {
             class="icon-btn theme-btn"
             @click="${this.toggleTheme}"
             aria-label="${this._theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}"
-            title="${this._theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme'}"
+            title="${(this._theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme') + (ThemeManager.getPreference() === 'device' ? '. Now matching your device.' : '. Match device is in your profile menu.')}"
           >${this._theme === 'dark' ? iconSun : iconMoon}</button>
         </nav>
       </header>

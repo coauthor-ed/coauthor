@@ -24,6 +24,9 @@ import { tr } from '../../core/i18nProvider.js';
 import { iconBack as ICON_BACK, iconHome as ICON_HOME, iconPrev as ICON_PREV, iconNext as ICON_NEXT, iconAutoplay } from '../icons/navIcons.js';
 import { NarrationPacer } from '../../engines/lesson/NarrationPacer.js';
 import { checkSidecarShape } from '../../core/narration/narrationModel.js';
+import { getVoicePref, setVoicePref, narrateKey, courseNarrateKey, getCourseNarrateChoice, presenterKey, captionsOffKey, MUTED_KEY, getFlag, setFlag } from '../../core/narration/voicePref.js';
+import { readCourseMeta } from '../../core/courseMeta.js';
+import { A11yAnnouncer } from '../../core/A11yAnnouncer.js';
 import '../components/NarrationUi.js';
 
 // "Narrate": a headphones mark, for the toggle shown only when a lesson has narrationRef.
@@ -391,7 +394,12 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
       .kbd-hint { display: none; }
       .nav-next, .nav-check { min-width: 0; flex: 1; }
     }
-    .content-area { padding-bottom: calc(var(--lesson-chrome-bottom, 0px) + 1rem); }
+    /* Room to clear the fixed bottom bar, counting the shell's own bottom
+       padding under this view (Q-84: a slide sized to the stage budget used
+       to scroll the desktop page by 42 px of padding and margin alone). */
+    .content-area { padding-bottom: max(var(--space-2), calc(var(--lesson-chrome-bottom, 0px) + var(--space-2) - var(--shell-main-pad-bottom, var(--space-4)))); }
+    #block-container > :last-child,
+    #block-container > :last-child > :last-child { margin-bottom: 0; }
     .lesson-head h1 { font-family: var(--font-heading); font-weight: var(--heading-weight); }
 
     /* plain: a chapter opening. The course in brass small caps, the lesson
@@ -509,9 +517,22 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
     /* plain, narrated (Q-17): one slim line, the same height on every slide;
        the slide title is the narration's fading overlay instead. */
     :host([data-look="plain"]) .plain-head.narr { align-items: center; padding: 10px 0 8px; }
+    /* Calm (_setNarrCalm): the slim narrated head steps back while the learner listens. */
+    .plain-head.narr { transition: opacity 420ms ease-out; }
+    :host([narr-calm]) .plain-head.narr { opacity: 0.18; }
+    :host([narr-hold]) .narr-check { visibility: hidden; }
+    @media (prefers-reduced-motion: reduce) { .plain-head.narr { transition: none; } }
     :host([data-look="plain"]) .plain-head.narr .ph-num { font-size: 34px; line-height: 1; min-width: 1.2em; }
     :host([data-look="plain"]) .plain-head.narr .ph-eyebrow { margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     :host([data-look="plain"]) .plain-head.narr .ph-count { padding-top: 0; }
+    /* Q-84: narrated on a desktop the slim head is slimmer still and the
+       slide starts right under it, so the scene gets the height back (the
+       caption band under it is the stage's, not the page's). */
+    @media (min-width: 601px) {
+      :host([data-look="plain"]) .plain-head.narr { padding: 4px 0 2px; }
+      :host([data-look="plain"]) .plain-head.narr .ph-num { font-size: 28px; }
+      :host([data-look="plain"][narr-on]) .content-area { padding-top: 4px; }
+    }
     @media (max-width: 600px) {
       :host([data-look="plain"]) .plain-head.narr { padding: 6px 0 4px; }
       :host([data-look="plain"]) .plain-head.narr .ph-num { font-size: 28px; }
@@ -793,6 +814,16 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
       gap: var(--space-2);
     }
     .narr-bar narration-strip { flex: 1 1 auto; min-width: 0; }
+    /* Blank screen (Q-90, a remote's B or period): the stage and its chrome
+       give way to the plain page background; any key or a tap returns. */
+    .narr-blank {
+      position: fixed; inset: 0; z-index: 1000; background: var(--bg-base);
+      display: flex; align-items: flex-end; justify-content: center; cursor: pointer;
+    }
+    .narr-blank span {
+      margin-bottom: 18px; font-family: var(--font-ui); font-size: 0.8rem;
+      color: var(--text-muted); opacity: 0.6;
+    }
     .narr-bar .narr-check { flex: none; min-height: 44px; padding: 10px 18px; }
     @media (max-width: 520px) {
       /* No room beside the strip: Check takes its own row above it. */
@@ -834,6 +865,12 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
     // Narrated lessons (NarrationPacer.js): a sidecar is loaded / narrated mode is on.
     _narrAvail: { type: Boolean, state: true },
     _narrOn: { type: Boolean, state: true },
+    // "Full text" on the caption (spec W1 D29n): the whole beat, not one phrase.
+    _narrFull: { type: Boolean, state: true },
+    // Presenter mode (Q-90): caption off, the blanked screen, the key help.
+    _narrCapOff: { type: Boolean, state: true },
+    _narrBlank: { type: Boolean, state: true },
+    _narrHelp: { type: Boolean, state: true },
     _narrTitle: { type: String, state: true },
     _narrTitleKey: { type: Number, state: true },
     // Title strip (lesson-modes-plan.md, prototype A's lesson head).
@@ -915,7 +952,7 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
   /** Autoplay is a per-profile preference, not per lesson. */
   get _autoplayKey() { return `coauthor:autoplay:${this.profileId || 'default'}`; }
   /** Narrated or text: a per-profile preference too. */
-  get _narrateKey() { return `coauthor:narrate:${this.profileId || 'default'}`; }
+  get _narrateKey() { return narrateKey(this.profileId); }
 
   connectedCallback() {
     super.connectedCallback();
@@ -1019,6 +1056,7 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
     // immediately — its own route-changed safety net covers the same case,
     // but this is the direct signal and fires first.
     EventBus.emit('lesson:header-nav', { active: false });
+    document.documentElement.style.removeProperty('--shell-main-pad-top');
     window.removeEventListener('keydown', this._keyListener);
     this.removeEventListener('touchstart', this._touchStartListener);
     this.removeEventListener('touchend', this._touchEndListener);
@@ -1128,6 +1166,8 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
    */
   _handleKey(e) {
     if (this._error) return;
+    // Blanked (Q-90, presenter): any key brings the screen back, and does only that.
+    if (this._narrBlank) { e.preventDefault(); this._setNarrBlank(false); return; }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     if (e.defaultPrevented) return;
     if (document.querySelector('dialog[open]')) return;
@@ -1144,6 +1184,8 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
       this._narr.toggle();
       return;
     }
+    // Narrated: presenter and remote keys (Q-90).
+    if (this._narrOn && this._narr && this._narrKey(e)) return;
     if (e.key === 'ArrowRight' || e.key === ' ') {
       e.preventDefault();
       this._handleAdvanceOrNextLesson();
@@ -1193,6 +1235,14 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
   }
 
   async updated(changedProperties) {
+    // Narrated (Q-84): the page furniture styles key off this.
+    if (changedProperties.has('_narrOn')) {
+      this.toggleAttribute('narr-on', !!this._narrOn);
+      // ...and the shell's own top padding over the slim head (plain, desktop).
+      const rootStyle = document.documentElement.style;
+      if (this._narrOn && this.look === 'plain' && !this._narrow) rootStyle.setProperty('--shell-main-pad-top', '4px');
+      else rootStyle.removeProperty('--shell-main-pad-top');
+    }
     // The same lesson reopened under another module (its module decides the
     // forced look and mode, and the next/previous links) is a fresh start too.
     if ((changedProperties.has('lessonId') || (changedProperties.has('moduleId') && this._engine)) && this.lessonId) {
@@ -1455,7 +1505,16 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
       this._lessonTitle = this._engine.lessonData?.title?.en || '';
       emitCue(CUES.LESSON_START, { lessonId: this.lessonId });
       // Optional: no narrationRef, no Narrate button, nothing else changes.
-      if (this._engine.lessonData?.narrationRef) this._loadNarration(this._engine, seq);
+      // Q-56: the sidecar (can be 200+ KB) loads now only for a learner who
+      // narrates; otherwise the button shows at once and the first tap
+      // loads it, so it never competes with the first slide on a slow line.
+      // Q-90: a course may prefer narrated mode (manifest narration.preferredMode).
+      if (this._engine.lessonData?.narrationRef) {
+        const want = await this._narrationWanted();
+        if (seq !== this._initSeq) return;
+        if (want) this._loadNarration(this._engine, seq);
+        else this._narrAvail = true;
+      }
 
       // Restore the preference only after the first block is mounted; before
       // that the engine has nothing to check eligibility against and would
@@ -1743,44 +1802,106 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
    * resolved like every other ref) and builds its pacer. A missing or
    * malformed sidecar only means no Narrate button.
    */
-  async _loadNarration(engine, seq) {
+  async _loadNarration(engine, seq, turnOn = false) {
     const ref = engine.lessonData?.narrationRef;
+    if (this._narrLoading) return this._narrLoading;
+    this._narrLoading = this._loadNarrationNow(engine, seq, ref, turnOn).finally(() => { this._narrLoading = null; });
+    return this._narrLoading;
+  }
+
+  async _loadNarrationNow(engine, seq, ref, turnOn) {
     try {
       const url = CourseSourceManager.resolveRef(ref, engine._bundleId);
       const sidecar = await ContentLoader.loadJSON(url);
       if (seq !== this._initSeq || engine !== this._engine) return;
       const { errors } = checkSidecarShape(sidecar);
-      if (errors.length) { console.warn('narration sidecar not used:', errors.slice(0, 3).join('; ')); return; }
+      if (errors.length) { console.warn('narration sidecar not used:', errors.slice(0, 3).join('; ')); this._narrAvail = false; return; }
       const base = new URL(url, window.location.href);
       this._narr = new NarrationPacer(engine, sidecar, {
         audioBase: (rel) => new URL(rel, base).href,
         bus: EventBus,
+        voice: getVoicePref(), // Q-43: the device's narrator voice, if this course offers it
+        // Q-90: presenter mode per profile, mute per tab
+        presenter: getFlag(presenterKey(this.profileId)),
+        muted: getFlag(MUTED_KEY, 'session'),
       });
-      this._narrUnsub = this._narr.subscribe((st) => { this._narrOn = st.narrated && !st.ended; });
+      this._narrCapOff = getFlag(captionsOffKey(this.profileId));
+      this._narrUnsub = this._narr.subscribe((st) => {
+        this._narrOn = st.narrated && !st.ended;
+        if (!this._narrOn || !st.playing || (st.waiting && st.waiting !== 'beat')) this._setNarrCalm(false);
+        this._applyNarrReading(st);
+        this._applyNarrHold(st);
+      });
       this._narr.onPosition(engine.narrationPosition());
       this._narrAvail = true;
-      let want = false;
-      try { want = localStorage.getItem(this._narrateKey) === '1'; } catch { /* storage off: text mode */ }
-      if (want) this._narr.setNarrated(true);
+      const want = turnOn || await this._narrationWanted();
+      if (seq !== this._initSeq || engine !== this._engine) return;
+      if (want) {
+        this._narr.setNarrated(true);
+        // Opened narrated by the course's preference: its clips are worth fetching.
+        if (!turnOn && this._narrPreferred) EventBus.emit('narration:wanted', { lessonId: engine.lessonId, profileId: this.profileId });
+      }
     } catch (e) {
       console.warn('narration could not be loaded', e);
+      // Shown before loading (Q-56): a sidecar that cannot be used hides it again.
+      if (seq === this._initSeq && engine === this._engine && !this._narr) this._narrAvail = false;
+    }
+  }
+
+  /**
+   * Open in narrated mode? (Q-90) A course whose manifest sets
+   * `narration.preferredMode` opens in that mode until the learner picks one
+   * in that course; then their last pick there wins (per profile, per course,
+   * localStorage beside the profile-wide key). A course without the field:
+   * the profile-wide narrated/text preference, exactly as before.
+   */
+  async _narrationWanted() {
+    const bid = this._engine?._bundleId || null;
+    let pref = '';
+    try { pref = bid ? readCourseMeta(await loadCourseManifest(bid)).narration.preferredMode : ''; } catch { pref = ''; }
+    this._narrPreferred = pref;
+    if (pref) {
+      const own = getCourseNarrateChoice(this.profileId, bid);
+      return own ? own === '1' : pref === 'narrated';
+    }
+    try { return localStorage.getItem(this._narrateKey) === '1'; } catch { return false; }
+  }
+
+  /** The learner chose a mode: kept profile-wide (as before) and, for a course with a preferred mode, for that course. */
+  _storeNarrateChoice(on) {
+    try { localStorage.setItem(this._narrateKey, on ? '1' : '0'); } catch { /* non-fatal */ }
+    const bid = this._engine?._bundleId;
+    if (this._narrPreferred && bid) {
+      try { localStorage.setItem(courseNarrateKey(this.profileId, bid), on ? '1' : '0'); } catch { /* non-fatal */ }
     }
   }
 
   _destroyNarration() {
+    this._narrLoading = null;
     this._narrUnsub?.();
     this._narrUnsub = null;
     this._narr?.destroy();
     this._narr = null;
     this._narrAvail = false;
     this._narrOn = false;
+    this._narrBlank = false;
+    this._narrHelp = false;
   }
 
-  _toggleNarration() {
-    if (!this._narr) return;
+  async _toggleNarration() {
+    if (!this._narr) {
+      // Q-56: not loaded yet (narration was off at open): load, then narrate.
+      if (!this._narrAvail || !this._engine) return;
+      this._storeNarrateChoice(true);
+      await this._loadNarration(this._engine, this._initSeq, true);
+      if (this._narr?.narrated) EventBus.emit('narration:wanted', { lessonId: this._engine?.lessonId, profileId: this.profileId });
+      return;
+    }
     const on = !this._narr.narrated;
     this._narr.setNarrated(on);
-    try { localStorage.setItem(this._narrateKey, on ? '1' : '0'); } catch { /* non-fatal */ }
+    this._storeNarrateChoice(on);
+    // Q-35: narrated now, so the clips are worth fetching for offline use.
+    if (on) EventBus.emit('narration:wanted', { lessonId: this._engine?.lessonId, profileId: this.profileId });
   }
 
   _onNarrationAction(e) {
@@ -1789,9 +1910,152 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
     if (!p) return;
     if (action === 'toggle') p.toggle();
     else if (action === 'continue') p.continueFromWait();
-    else if (action === 'prev') this._handlePrev();
-    else if (action === 'next') this._handleNext();
+    else if (action === 'prev') { if (p.presenter) this._narrPrev(); else this._handlePrev(); }
+    else if (action === 'next') { if (p.presenter) this._narrNext(false); else this._handleNext(); }
+    else if (action === 'mute') this._narrMute();
+    else if (action === 'presenter') this._narrPresenter();
+    else if (action === 'captions') this._narrCaptions();
+    else if (action === 'help') this._narrHelp = !this._narrHelp;
     else if (action === 'read') this._toggleNarration();
+    else if (action === 'voice') this._setNarrationVoice(e.detail.voice);
+    else if (action === 'fulltext') { this._narrFull = !this._narrFull; this._applyNarrReading(p.state()); }
+  }
+
+  // ── presenter mode (Q-90): mute, hold per beat, remote keys, blank ──────
+
+  /** Next in presenter mode: finish the beat (cues fired) and go on, end a
+   *  wait, or (a question waiting) nothing from a key; a strip press then
+   *  skips as the lesson's own Next does. */
+  _narrNext(fromKey) {
+    const r = this._narr?.presenterNext();
+    if (r === 'navigate') this._handleAdvanceOrNextLesson();
+    else if (r === 'none' && !fromKey) this._handleNext();
+  }
+
+  /** Previous in presenter mode: restart the beat past 1.5 s, else the beat before. */
+  _narrPrev() {
+    const r = this._narr?.presenterPrev({ canBack: !!this._stepState?.canGoBack });
+    if (r === 'navigate') this._handleRetreatOrPrevLesson();
+  }
+
+  _narrMute() {
+    const p = this._narr;
+    if (!p) return;
+    p.setMuted(!p.muted);
+    setFlag(MUTED_KEY, p.muted, 'session');
+    A11yAnnouncer.announce(p.muted ? 'Narration muted' : 'Narration sound on');
+  }
+
+  _narrPresenter() {
+    const p = this._narr;
+    if (!p) return;
+    p.setPresenter(!p.presenter);
+    setFlag(presenterKey(this.profileId), p.presenter);
+    A11yAnnouncer.announce(p.presenter ? 'Presenter mode on: the narration stops after each beat' : 'Presenter mode off');
+  }
+
+  _narrCaptions() {
+    this._narrCapOff = !this._narrCapOff;
+    setFlag(captionsOffKey(this.profileId), this._narrCapOff);
+    A11yAnnouncer.announce(this._narrCapOff ? 'Captions off' : 'Captions on');
+  }
+
+  /** B or period (a remote's blank key): pause and cover the screen; any key or tap returns. */
+  _setNarrBlank(on) {
+    on = !!on;
+    if (on === !!this._narrBlank) return;
+    if (on) this._narr?.pause();
+    this._narrBlank = on;
+  }
+
+  /** Does a control on this key's path own the arrow (and page) keys? A slider,
+   *  a spin box, a list, a radio group, a tab list, a grid or a menu does. */
+  _arrowOwned(e) {
+    for (const node of e.composedPath()) {
+      if (node === this || node === window || node === document) break;
+      if (!(node instanceof Element)) continue;
+      if (node.matches('input, select, textarea, [contenteditable=""], [contenteditable="true"], [role="slider"], [role="spinbutton"], [role="listbox"], [role="radiogroup"], [role="tablist"], [role="grid"], [role="tree"], [role="menu"], [role="menubar"], [role="scrollbar"]')) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Narrated keys (Q-90), presentation remotes included (clickers send
+   * PageDown/PageUp or the arrows, B or period to blank, F5 to present).
+   * Returns true when the key was handled here.
+   */
+  _narrKey(e) {
+    const p = this._narr;
+    const k = e.key;
+    const pres = !!p.presenter;
+    if (k === 'F5') {
+      e.preventDefault();
+      if (!document.fullscreenElement) document.documentElement.requestFullscreen?.()?.catch?.(() => {});
+      return true;
+    }
+    if (e.shiftKey && k !== '?') return false;
+    const next = k === 'PageDown' || k === 'ArrowRight' || (pres && k === 'ArrowDown');
+    const prev = k === 'PageUp' || k === 'ArrowLeft' || (pres && k === 'ArrowUp');
+    if (next || prev) {
+      if (this._arrowOwned(e)) return true; // the control keeps its keys
+      e.preventDefault();
+      if (pres) { if (next) this._narrNext(true); else this._narrPrev(); }
+      else if (next) this._handleAdvanceOrNextLesson();
+      else this._handleRetreatOrPrevLesson();
+      return true;
+    }
+    if (k === 'm' || k === 'M') { e.preventDefault(); this._narrMute(); return true; }
+    if (k === 'b' || k === 'B' || k === '.') { e.preventDefault(); this._setNarrBlank(true); return true; }
+    if (pres && (k === 'c' || k === 'C')) { e.preventDefault(); this._narrCaptions(); return true; }
+    if (k === '?') { e.preventDefault(); this._narrHelp = !this._narrHelp; return true; }
+    if (k === 'Escape' && this._narrHelp) { this._narrHelp = false; return true; }
+    return false;
+  }
+
+  /**
+   * Calm (spec W1 D29n, page furniture): the narration plays and the learner
+   * only listens, so the page around the slide steps back: the app header and
+   * the lesson head fade (AppShell, here), the block's figure caption and
+   * scene tool buttons fade (content-block). Opacity only, so nothing moves;
+   * any pointer, key or touch, a pause or a wait brings it all back
+   * (<narration-strip> idle). Never in text mode.
+   */
+  _setNarrCalm(on) {
+    on = !!on && !!this._narrOn;
+    if (on === !!this._narrCalm) return;
+    this._narrCalm = on;
+    this.toggleAttribute('narr-calm', on);
+    this._engine?.setNarrationCalm?.(on);
+    EventBus.emit('lesson:header-nav', { calm: on });
+  }
+
+  /**
+   * Reading one phrase at a time (spec W1 D29n): while the narration plays and
+   * "Full text" is off, a text slide holds its prose back and the caption
+   * shows the phrase being spoken where the beat is. Pause, a wait, "Full
+   * text" or "Read instead" bring the prose back (content-block).
+   */
+  _applyNarrReading(st) {
+    // A presenter hold (Q-90) reads like playing: the prose stays back.
+    const on = !!(st?.narrated && !st.ended && st.playing && (!st.waiting || st.waiting === 'beat') && !this._narrFull);
+    if (on === !!this._narrReading) return;
+    this._narrReading = on;
+    this._engine?.setNarrationReading?.(on);
+  }
+
+  /** Prompt hold (Q-77): the bar's own Check waits with the card it belongs to. */
+  _applyNarrHold(st) {
+    this.toggleAttribute('narr-hold', st?.prompt === 'held');
+  }
+
+  /** The learner picked another narrator voice (Q-43): kept on the device, said aloud for a screen reader. */
+  _setNarrationVoice(id) {
+    const p = this._narr;
+    if (!p || !p.setVoice(id)) return;
+    setVoicePref(id);
+    if (p.narrated) EventBus.emit('narration:wanted', { lessonId: this._engine?.lessonId, profileId: this.profileId });
+    const v = p.voices.find((x) => x.id === id);
+    A11yAnnouncer.announce(`Narrator voice: ${v?.label || id}`);
   }
 
   /** Narrated: a tap on the stage that no control or scene claims plays/pauses. */
@@ -1830,7 +2094,9 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
       <div class="action-bar narr-bar" role="region" aria-label="Narration">
         <div class="action-bar-inner narr-inner">
           <narration-strip .pacer=${this._narr} .canBack=${!!this._stepState?.canGoBack} data-look=${this.look || 'quill'}
-            @narration-action=${(e) => this._onNarrationAction(e)}></narration-strip>
+            .capOff=${!!this._narrCapOff} .helpOpen=${!!this._narrHelp}
+            @narration-action=${(e) => this._onNarrationAction(e)}
+            @narration-calm=${(e) => this._setNarrCalm(e.detail?.calm)}></narration-strip>
           ${canCheck && !panelCheck ? html`<button class="btn-3d btn-success nav-check narr-check" @click="${this._handleCheck}">Check answer</button>` : ''}
         </div>
       </div>
@@ -2322,8 +2588,11 @@ export class LessonSession extends LookMixin(GamificationMixin(LessonModeMixin(L
       <companion-slot kind="coach"></companion-slot>
       <companion-slot kind="math-coach"></companion-slot>
       ${this._narrOn && this._narr ? html`<narration-captions .pacer=${this._narr} data-look=${this.look || 'quill'}
-        .stageInfo=${(seg) => this._narrStageInfo(seg)} .slideTitle=${this._narrTitle || ''} .titleKey=${this._narrTitleKey || 0}
+        .stageInfo=${(seg) => this._narrStageInfo(seg)} .slideTitle=${this._narrTitle || ''} .titleKey=${this._narrTitleKey || 0} .fullText=${!!this._narrFull}
+        .capOff=${!!(this._narrCapOff && this._narr.presenter)}
         @narration-action=${(e) => this._onNarrationAction(e)}></narration-captions>` : ''}
+      ${this._narrBlank && this._narrOn ? html`<div class="narr-blank" role="button" tabindex="0" aria-label="Screen blanked, narration paused. Press any key or tap to return."
+        @click=${() => this._setNarrBlank(false)}><span>Paused. Press any key to return.</span></div>` : ''}
       ${this._renderActionBar()}
     `;
   }

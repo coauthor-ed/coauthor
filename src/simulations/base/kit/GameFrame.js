@@ -42,6 +42,7 @@ import { DomSimulation } from '../DomSimulation.js';
 import { withChallenge } from '../ChallengeMode.js';
 import { SimMascotDom } from '../SimMascotDom.js';
 import { useLook, lookOf } from './lookProfile.js';
+import { applyToneInks } from './SimLookDom.js';
 
 export const GAME_W = 1100;
 export const GAME_H = 405;
@@ -141,6 +142,9 @@ export function mountGame(scene, { html, css = '', onResize = null, check = 'Che
   useLook(scene._scaleWrap);
   scene.render({ html, css: SimMascotDom.styles() + GAME_FRAME_CSS + css, ui: false });
   if (lookOf().mascot) scene._scaleWrap?.classList.add('gm-quill');
+  // Chips on a series/accent fill read --sim-ink-on-N; without this they fall back to bg-deep
+  // (light text on a light tile). GameBoard.refreshTheme re-runs it on a theme change.
+  applyToneInks(scene.root);
   scene.quill = SimMascotDom.mount(scene.root, { x: (scene.constructor.WIDTH ?? GAME_W) - 46, y: 88, height: 60, flip: true, bubbleSide: 'left' });
   const content = scene.root.firstElementChild;
   const opt = typeof check === 'string' ? { label: check } : check;
@@ -183,6 +187,11 @@ export class GameBoard extends withChallenge(DomSimulation) {
   static SELF_CHECKING = true;
   static SCORING = { mode: 'accuracy' };
   static CONTROLS = [];
+
+  refreshTheme() {
+    super.refreshTheme?.();
+    if (this.root) applyToneInks(this.root);
+  }
 
   destroy() {
     unmountGame(this);

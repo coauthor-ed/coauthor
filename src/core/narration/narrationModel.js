@@ -70,6 +70,93 @@ export function findSegment(index, { block, stepId = null, stepIndex = 0 } = {})
 }
 
 /**
+ * Voices (Q-43). A sidecar may offer several narrator voices, built at
+ * authoring time: top-level `voices: [{ id, label, name, rate, pitch }]`,
+ * the first being the default. A segment's own top-level `audio`,
+ * `durationMs`, `words`, `cues` (and `voice`, `rate`, `pitch`, `ttsHash`)
+ * are the DEFAULT voice's, exactly as in a one-voice sidecar, so an older
+ * engine keeps playing it; every other voice sits in `seg.voices[id]` with
+ * the same fields plus its own `textHash`. Text, await, hint and free are
+ * shared. A sidecar with no `voices` list has one voice and no picker.
+ * @returns {Array<{id: string, label: string, name: string}>}
+ */
+export function sidecarVoices(sidecar) {
+  const list = Array.isArray(sidecar?.voices) ? sidecar.voices : [];
+  const seen = new Set();
+  const out = [];
+  for (const v of list) {
+    if (!v || typeof v.id !== 'string' || !v.id || seen.has(v.id)) continue;
+    seen.add(v.id);
+    out.push({ id: v.id, label: typeof v.label === 'string' && v.label.trim() ? v.label.trim() : v.id, name: typeof v.name === 'string' ? v.name : '' });
+  }
+  return out;
+}
+
+/** The voice to use: `wanted` when the sidecar offers it, else its first (default), else null (one voice). */
+export function pickVoice(sidecar, wanted) {
+  const vs = sidecarVoices(sidecar);
+  if (!vs.length) return null;
+  return vs.some((v) => v.id === wanted) ? wanted : vs[0].id;
+}
+
+const VOICE_FIELDS = ['audio', 'durationMs', 'words', 'cues', 'voice', 'rate', 'pitch', 'ttsHash'];
+const voiceCache = new WeakMap();
+
+/**
+ * One segment as voice `voiceId` speaks it: the default segment with that
+ * voice's fields laid over (same object each call, so identity checks hold),
+ * carrying `voiceId` and `defaultSeg`. The segment itself when the voice is
+ * the default, unknown, has no audio for this beat, or is stale (its
+ * `textHash` differs from the segment's): the default voice then reads it.
+ */
+export function segmentForVoice(seg, voiceId) {
+  if (!seg || !voiceId) return seg;
+  const alt = seg.voices?.[voiceId];
+  if (!alt || typeof alt.audio !== 'string' || !alt.audio) return seg;
+  if (alt.textHash && seg.textHash && alt.textHash !== seg.textHash) return seg;
+  let m = voiceCache.get(seg);
+  if (!m) { m = new Map(); voiceCache.set(seg, m); }
+  let out = m.get(voiceId);
+  if (!out) {
+    out = { ...seg, voiceId, defaultSeg: seg };
+    delete out.voices;
+    for (const k of VOICE_FIELDS) if (alt[k] !== undefined) out[k] = alt[k];
+    m.set(voiceId, out);
+  }
+  return out;
+}
+
+/**
+ * The same spoken position in another voice's audio of one beat. The word
+ * under `ms` in `from` is found by its char offset in `to` (both index the
+ * same text, so this holds even if the two word lists differ in length).
+ * `wordStart`: the start of that word in `to` (where a switched voice
+ * resumes, so no word is cut); else the same fraction into it (a smooth
+ * clock, e.g. scene time). Falls back to the duration ratio.
+ */
+export function mapVoiceMs(from, to, ms, { wordStart = false } = {}) {
+  const fw = from?.words || [];
+  const tw = to?.words || [];
+  const t = Math.max(0, Number(ms) || 0);
+  const ratio = () => {
+    const a = Number(from?.durationMs) || 0;
+    const b = Number(to?.durationMs) || 0;
+    return a > 0 && b > 0 ? Math.round(Math.min(b, t * (b / a))) : t;
+  };
+  if (!fw.length || !tw.length) return ratio();
+  const i = wordIndexAt(fw, t);
+  if (i < 0) return wordStart ? 0 : Math.round(Math.min(tw[0][0], t * (tw[0][0] / Math.max(1, fw[0][0]))));
+  const ch = fw[i][2];
+  let k = 0;
+  for (let j = 0; j < tw.length; j++) { if (tw[j][2] <= ch) k = j; else break; }
+  if (wordStart) return tw[k][0];
+  const fEnd = i + 1 < fw.length ? fw[i + 1][0] : Math.max(fw[i][1], Number(from?.durationMs) || fw[i][1]);
+  const tEnd = k + 1 < tw.length ? tw[k + 1][0] : Math.max(tw[k][1], Number(to?.durationMs) || tw[k][1]);
+  const frac = Math.max(0, Math.min(1, (t - fw[i][0]) / Math.max(1, fEnd - fw[i][0])));
+  return Math.round(tw[k][0] + frac * (tEnd - tw[k][0]));
+}
+
+/**
  * Index of the word being spoken at `ms` (media time): the last word whose
  * start is <= ms. -1 before the first word. Binary search, words sorted by start.
  * @param {Array<[number, number, number]>} words
@@ -257,6 +344,57 @@ export function dueCues(cues, ms, fired) {
   return out;
 }
 
+/**
+ * Visual focus cues (spec W1 D29n, the focus contract). A cue id
+ *   focus.<ids>  lights those parts and dims the rest (several ids joined by + or ,)
+ *   show.<ids>   reveal on cue: the parts stay hidden from the beat's start until
+ *                this cue, then appear lit (the newest arrival), the rest dimmed
+ *   focus.none   clears the light and the dim (revealed parts stay)
+ *   focus.all    the same, and reveals every part still held
+ * `focus:` / `show:` work too. Returns null for any other cue id.
+ */
+export function parseFocusCue(id) {
+  const m = /^(focus|show)[.:](.+)$/.exec(String(id || ''));
+  if (!m) return null;
+  const rest = m[2].trim();
+  if (m[1] === 'focus' && (rest === 'none' || rest === 'all')) return { kind: rest, ids: [] };
+  // focus.rest: nothing lit, every tagged part dimmed (the narration has moved
+  // off the picture, e.g. to a note), the same state a beat starts in.
+  if (m[1] === 'focus' && rest === 'rest') return { kind: 'focus', ids: ['narr-rest'] };
+  const ids = rest.split(/[+,]/).map((x) => x.trim()).filter(Boolean);
+  return ids.length ? { kind: m[1], ids } : null;
+}
+
+/**
+ * The focus at beat time `ms`, folded from the beat's cue marks in time order,
+ * so it is the same however the time was reached (play, scrub, replay, voice
+ * switch). `on`: lit ids (empty = no focus, nothing dimmed); `held`: ids of
+ * show cues not reached yet (hidden); `any`: the beat carries focus cues at all;
+ * `rest`: it does, and none has fired yet (all tagged parts dimmed).
+ * `cues` and `ms` must share one clock (the default voice's, as scenes get it).
+ */
+export function focusAt(cues, ms) {
+  const list = (cues || []).filter((c) => c && Number.isFinite(c.t) && parseFocusCue(c.id))
+    .slice().sort((a, b) => a.t - b.t);
+  const held = new Set();
+  for (const c of list) { const f = parseFocusCue(c.id); if (f.kind === 'show') f.ids.forEach((i) => held.add(i)); }
+  let on = [];
+  let fired = 0;
+  const t = Number.isFinite(ms) ? ms : (ms === Infinity ? Infinity : 0);
+  for (const c of list) {
+    if (c.t > t) break;
+    fired++;
+    const f = parseFocusCue(c.id);
+    if (f.kind === 'none') on = [];
+    else if (f.kind === 'all') { on = []; held.clear(); }
+    else { on = f.ids.slice(); if (f.kind === 'show') f.ids.forEach((i) => held.delete(i)); }
+  }
+  // rest: the beat carries focus cues but none has fired yet (Q-77): its
+  // tagged parts wait, dimmed, so the last beat's picture never reads as
+  // what is being spoken. A cue at the beat's first word ends it at once.
+  return { on, held: [...held], any: list.length > 0, rest: list.length > 0 && fired === 0 };
+}
+
 /** "blocks/L01/blk-l01-s01.json" -> "blk-l01-s01": a block's id by convention. */
 export function refBasename(ref) {
   const s = String(ref || '').split('?')[0].split('/').pop() || '';
@@ -332,6 +470,10 @@ export function checkSidecarShape(sc) {
   if (!sc || typeof sc !== 'object') return { errors: ['narration sidecar is not an object'], warnings };
   if (sc.format !== NARRATION_FORMAT) errors.push(`narration sidecar format must be "${NARRATION_FORMAT}"`);
   if (!Array.isArray(sc.segments)) { errors.push('narration sidecar needs a segments array'); return { errors, warnings }; }
+  if (sc.voices != null && (!Array.isArray(sc.voices) || sc.voices.some((v) => !v || typeof v.id !== 'string' || !v.id))) {
+    errors.push('narration sidecar voices must be [{ id, label, name, rate, pitch }]');
+  }
+  const ids = new Set(sidecarVoices(sc).map((v) => v.id));
   const seen = new Set();
   sc.segments.forEach((s, i) => {
     const at = `segments[${i}]`;
@@ -357,7 +499,21 @@ export function checkSidecarShape(sc) {
       errors.push(`${at}.cues must be [{ id, char, t }]`);
     }
     if (s.await != null && s.await !== 'answer' && s.await !== 'interact') errors.push(`${at}.await must be "answer" or "interact"`);
+    if (s.free != null && typeof s.free !== 'boolean') errors.push(`${at}.free must be true or false`);
+    if (s.closed != null && typeof s.closed !== 'boolean') errors.push(`${at}.closed must be true or false`);
+    if (s.hint != null && typeof s.hint !== 'string') errors.push(`${at}.hint must be a string (the "Your turn" line)`);
     if (s.lines != null && !Array.isArray(s.lines)) errors.push(`${at}.lines must be word ranges [[first, last], ...]`);
+    if (s.voices != null) {
+      if (typeof s.voices !== 'object' || Array.isArray(s.voices)) errors.push(`${at}.voices must be { <voice id>: { audio, durationMs, words, cues } }`);
+      else for (const [id, v] of Object.entries(s.voices)) {
+        if (!v || typeof v !== 'object') { errors.push(`${at}.voices.${id} is not an object`); continue; }
+        if (!ids.has(id)) warnings.push(`${at}.voices.${id} is not in the sidecar's voices list: never played`);
+        if (v.words != null && (!Array.isArray(v.words) || v.words.some((w, j) => !Array.isArray(w) || w.length < 3 || !w.every(Number.isFinite) || (j > 0 && w[0] < v.words[j - 1][0])))) {
+          errors.push(`${at}.voices.${id}.words must be [startMs, endMs, charOffset], in order`);
+        }
+        if (v.audio != null && typeof v.audio !== 'string') errors.push(`${at}.voices.${id}.audio must be a path`);
+      }
+    }
     if (s.textHash != null && !/^[0-9a-f]{64}$/.test(String(s.textHash))) warnings.push(`${at}.textHash is not a sha256 hex digest`);
   });
   return { errors, warnings };

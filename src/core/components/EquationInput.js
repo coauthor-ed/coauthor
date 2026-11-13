@@ -4,10 +4,12 @@ import { EventBus } from '../EventBus.js';
 // CortexJS Compute Engine for evaluation
 import { ComputeEngine } from 'vendor/compute-engine.js';
 // MathLive for the <math-field> Web Component
-import 'vendor/mathlive.js';
+import * as mathlive from 'vendor/mathlive.js';
+import { configureMathlive } from '../mathliveConfig.js';
 import '../../ui/components/MarkdownRenderer.js';
 
 const ce = new ComputeEngine();
+configureMathlive(mathlive);
 
 export class EquationInput extends LitElement {
   static styles = css`

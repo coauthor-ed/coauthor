@@ -61,8 +61,9 @@ export function courseProgress(moduleRefs, progressByRef) {
  * into one course entry (first module's position, modules in catalog order,
  * which is manifest order). A one-module bundle keeps its module entry as is.
  * A course entry is { type: 'course', path: 'course:<bundleId>', bundleId,
- * title, subject, grade, modules, lessons (all modules' lessons, flattened),
- * _remoteSource, _remoteTitle }.
+ * title, description (the bundle manifest's, else null), subject, grade,
+ * modules, lessons (all modules' lessons, flattened), _remoteSource,
+ * _remoteTitle }.
  */
 export function groupShelf(modules, bundleIdOf) {
   const byBundle = new Map();
@@ -85,6 +86,7 @@ export function groupShelf(modules, bundleIdOf) {
       path: `course:${id}`,
       bundleId: id,
       title: { en: m._remoteTitle || id },
+      description: m._remoteDescription ? { en: m._remoteDescription } : null,
       subject: m.subject,
       grade: m.grade,
       modules: group,

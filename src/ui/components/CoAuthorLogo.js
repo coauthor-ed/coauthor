@@ -23,6 +23,16 @@ import { BRAND_DEFS, quillHead, PEN, brandPaint } from './brandSvg.js';
 
 let introPlayed = false;
 
+// Idle rhythm, as the old CSS loops had it: a blink every 6.5 s (0.2 s long,
+// first at 8.5 s), a glance every 13 s (2.1 s long, first at 10.2 s).
+const BLINK_EVERY = 6500, BLINK_FIRST = 8510;
+const GLANCE_EVERY = 13000, GLANCE_FIRST = 10200;
+const BLINK_FRAMES = [{ transform: 'scaleY(1)', easing: 'ease' }, { transform: 'scaleY(0.08)', easing: 'ease' }, { transform: 'scaleY(1)' }];
+const GLANCE_FRAMES = [
+  { transform: 'none', offset: 0, easing: 'ease' }, { transform: 'translate(-6px, -5px)', offset: 0.25, easing: 'ease' },
+  { transform: 'translate(-6px, -5px)', offset: 0.75, easing: 'ease' }, { transform: 'none', offset: 1 },
+];
+
 // Quill's head rising from the bottom edge of a sunny tile.
 const MARK = svg`
   ${BRAND_DEFS}
@@ -61,13 +71,10 @@ export class CoAuthorLogo extends LitElement {
     .quill { transform-box: fill-box; transform-origin: 50% 100%; }
     .pupil { transition: transform 0.2s ease-out; }
 
-    /* idle: a blink and a glance, long gaps */
-    .eye { animation: blink 6.5s 2.4s infinite; }
-    .eye + .eye { animation-delay: 2.46s; }
-    @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 95.5% { transform: scaleY(0.08); } 97% { transform: scaleY(1); } }
-    .pupil { animation: glance 13s 5s infinite; }
-    @keyframes glance { 0%, 40%, 56%, 100% { transform: none; } 44%, 52% { transform: translate(-6px, -5px); } }
-    :host(:hover) .pupil { animation: none; transform: translate(4px, -7px); }
+    /* idle: a blink and a glance, long gaps. Played one at a time from a timer
+       (see _blink, _glance), not as endless CSS loops: an endless loop keeps the
+       compositor drawing frames between blinks (Q-46, battery). */
+    :host(:hover) .pupil { transform: translate(4px, -7px); }
 
     /* intro: the pen writes the word, Quill's eyes follow, then a hop */
     .pending .ink { clip-path: inset(0 100% 0 0); }
@@ -123,6 +130,27 @@ export class CoAuthorLogo extends LitElement {
       this._intro = true;
       this._introTimer = setTimeout(() => { this._intro = false; }, 2500);
     }, 200);
+    if (!reduced) {
+      this._blinkTimer = setTimeout(() => this._blink(), BLINK_FIRST);
+      this._glanceTimer = setTimeout(() => this._glance(), GLANCE_FIRST);
+    }
+  }
+
+  /** Idle moves play only when someone can see them. */
+  _canIdle() {
+    return this.isConnected && !this._intro && this.offsetWidth > 0 && document.visibilityState !== 'hidden';
+  }
+
+  _blink() {
+    this._blinkTimer = setTimeout(() => this._blink(), BLINK_EVERY);
+    if (!this._canIdle()) return;
+    this.renderRoot.querySelectorAll('.eye').forEach((e, i) => e.animate?.(BLINK_FRAMES, { duration: 195, delay: i * 60 }));
+  }
+
+  _glance() {
+    this._glanceTimer = setTimeout(() => this._glance(), GLANCE_EVERY);
+    if (!this._canIdle() || this.matches(':hover')) return;
+    this.renderRoot.querySelectorAll('.pupil').forEach((e) => e.animate?.(GLANCE_FRAMES, { duration: 2080 }));
   }
 
   disconnectedCallback() {
@@ -130,6 +158,8 @@ export class CoAuthorLogo extends LitElement {
     this.removeEventListener('pointerdown', this._onTap);
     clearTimeout(this._introTimer);
     clearTimeout(this._tapTimer);
+    clearTimeout(this._blinkTimer);
+    clearTimeout(this._glanceTimer);
   }
 
   _onTap() {

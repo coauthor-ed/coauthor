@@ -170,6 +170,27 @@ export function coverCropWindow(imageAspect, boxAspect) {
   return { x: 0, y: (1 - h) / 2, w: 1, h };
 }
 
+/** How far the comic camera may zoom. See cameraScale. */
+export const MAX_CAMERA_SCALE = 2;
+
+/**
+ * The scale for the comic camera (`reveal.focusMode: "camera"`): the image
+ * pans and zooms so the beat's rect fills the frame, with no dimming.
+ *
+ * Contain (`min`), not cover: a camera frames the whole region the beat is
+ * about, so nothing in the rect is cut off; an author who draws the rect at
+ * the image's own aspect gets an exact fit. Capped at 2 for the same
+ * resolution reason as MAX_FOCUS_SCALE (the shipped story stills are 1344px
+ * wide; at 2x a phone column still asks for less than that). Never below 1:
+ * the frame never shows past the image's edge. focusTranslate() then centres
+ * the rect, clamped so no gutter shows.
+ */
+export function cameraScale(rect) {
+  if (!rect) return 1;
+  const zoom = Math.min(1 / rect.w, 1 / rect.h);
+  return Math.max(1, Math.min(MAX_CAMERA_SCALE, zoom));
+}
+
 /**
  * Remaps a focus rect authored in the *full image's* fractional coordinate
  * space into the coordinate space of a box that displays it via

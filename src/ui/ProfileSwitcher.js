@@ -6,7 +6,13 @@ import { GamificationMixin } from '../core/mixins/GamificationMixin.js';
 import { LookManager } from '../core/LookManager.js';
 import { gradeLabel } from '../core/gradeLabel.js';
 import { ThemeManager } from '../core/ThemeManager.js';
-import { iconParent, iconChevronDown, iconFlame, iconBolt, iconSliders, iconSearch, iconGuide, iconSun, iconMoon } from './icons/uiIcons.js';
+import { iconParent, iconChevronDown, iconFlame, iconBolt, iconSliders, iconSearch, iconGuide, iconSun, iconMoon, iconShare, iconThemeDevice } from './icons/uiIcons.js';
+import { engineUrl } from '../core/shareLinks.js';
+import { nextPref } from '../core/themePref.js';
+
+// Q-66: the theme preference, as the menu names it.
+const THEME_NAMES = { device: 'Match device', light: 'Light', dark: 'Dark' };
+const THEME_ICONS = { device: iconThemeDevice, light: iconSun, dark: iconMoon };
 
 // The two looks a profile can choose (profile.look, LookManager.setProfile).
 const LOOK_NAMES = { quill: 'Playful, with Quill', plain: 'Plain' };
@@ -192,6 +198,31 @@ export class ProfileSwitcher extends GamificationMixin(LessonModeMixin(LitElemen
        own copies at the same widths): Discover and Guides below 480px, the
        theme toggle below 350px. */
     [role="menuitem"].narrow-480, [role="menuitem"].narrow-350 { display: none; }
+    /* Empty-shelf nudge: below 480px Discover lives in this menu, so the pill
+       carries the pulse ring and the Discover item a still dot. */
+    .nudge-dot {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--accent-coral);
+      box-shadow: 0 0 0 2px var(--appbar-bg, var(--bg-base));
+      display: none;
+    }
+    .profile-btn { position: relative; }
+    @media (max-width: 480px) {
+      .profile-btn .nudge-dot { display: block; animation: ps-nudge 1.8s ease-out infinite; }
+    }
+    [role="menuitem"] .nudge-dot { display: block; position: static; margin-left: auto; flex: none; align-self: center; box-shadow: none; }
+    @keyframes ps-nudge {
+      0% { box-shadow: 0 0 0 2px var(--appbar-bg, var(--bg-base)), 0 0 0 2px color-mix(in srgb, var(--accent-coral) 55%, transparent); }
+      70%, 100% { box-shadow: 0 0 0 2px var(--appbar-bg, var(--bg-base)), 0 0 0 11px color-mix(in srgb, var(--accent-coral) 0%, transparent); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .profile-btn .nudge-dot { animation: none; }
+    }
     @media (max-width: 480px) { [role="menuitem"].narrow-480 { display: flex; } }
     @media (max-width: 350px) { [role="menuitem"].narrow-350 { display: flex; } }
     .item-sub { font-weight: var(--fw-medium); font-size: 0.78rem; color: var(--text-muted); }
@@ -260,6 +291,8 @@ export class ProfileSwitcher extends GamificationMixin(LessonModeMixin(LitElemen
     // True once the name's natural width overflows its cap (see _measureName).
     _nameTooLong: { type: Boolean, state: true },
     _open: { type: Boolean, state: true },
+    /** Empty shelf, Discover not yet opened (AppShell, core/discoverNudge.js). */
+    nudge: { type: Boolean },
     _stats: { type: Object, state: true },
   };
 
@@ -397,9 +430,18 @@ export class ProfileSwitcher extends GamificationMixin(LessonModeMixin(LitElemen
     if (location.hash !== hash) location.hash = hash;
   }
 
-  _toggleTheme() {
-    ThemeManager.setTheme(ThemeManager.getTheme() === 'light' ? 'dark' : 'light');
-    this._close(true);
+  /** Share CoAuthor (Q-52): the engine's own address as a QR and a link. */
+  async _share() {
+    this._close(false);
+    const { openShareSheet } = await import('./components/ShareSheet.js');
+    openShareSheet({ url: engineUrl(), heading: 'Share CoAuthor', title: 'Free lessons that work offline. Scan to open the app.' });
+  }
+
+  /** Q-66: Match device, then Light, then Dark. The menu stays open so the
+   *  learner sees the new label (and can tap again). */
+  _cycleTheme() {
+    ThemeManager.cyclePreference();
+    this.requestUpdate();
   }
 
   _goParent(e) {
@@ -430,7 +472,7 @@ export class ProfileSwitcher extends GamificationMixin(LessonModeMixin(LitElemen
         title="${name}"
         @click="${() => this._toggle()}"
         @keydown="${this._onBtnKey}"
-      ><span class="avatar" aria-hidden="true">${initial}</span>${this._nameTooLong ? '' : html`<span class="ps-name">${name}</span>`}<span class="chev">${iconChevronDown}</span></button>
+      ><span class="avatar" aria-hidden="true">${initial}</span>${this._nameTooLong ? '' : html`<span class="ps-name">${name}</span>`}<span class="chev">${iconChevronDown}</span>${this.nudge ? html`<span class="nudge-dot" aria-hidden="true"></span>` : ''}</button>
       ${this._open ? html`
         <div class="scrim" aria-hidden="true"></div>
         <div class="menu" id="student-menu" role="menu" aria-label="${name}" @keydown="${this._onMenuKey}">
@@ -457,17 +499,22 @@ export class ProfileSwitcher extends GamificationMixin(LessonModeMixin(LitElemen
             <span class="item-icon">${iconSliders}</span>
             <span class="item-text">Look: ${LOOK_NAMES[LookManager.profileLook()] || 'Playful, with Quill'}<span class="item-sub">Switch to ${LookManager.profileLook() === 'plain' ? LOOK_NAMES.quill : LOOK_NAMES.plain}</span></span>
           </button>
+          <button role="menuitem" tabindex="-1" @click="${this._share}">
+            <span class="item-icon">${iconShare}</span>
+            <span class="item-text">Share CoAuthor<span class="item-sub">QR code and link for another phone</span></span>
+          </button>
           <button role="menuitem" tabindex="-1" class="narrow-480" @click="${() => this._goTo('#/discover')}">
             <span class="item-icon">${iconSearch}</span>
-            <span class="item-text">Discover<span class="item-sub">Find more courses</span></span>
+            <span class="item-text">Discover<span class="item-sub">${this.nudge ? 'Find your first course' : 'Find more courses'}</span></span>
+            ${this.nudge ? html`<span class="nudge-dot" aria-hidden="true"></span>` : ''}
           </button>
           <button role="menuitem" tabindex="-1" class="narrow-480" @click="${() => this._goTo('#/guides')}">
             <span class="item-icon">${iconGuide}</span>
             <span class="item-text">Guides<span class="item-sub">How the app works</span></span>
           </button>
-          <button role="menuitem" tabindex="-1" class="narrow-350" @click="${this._toggleTheme}">
-            <span class="item-icon">${ThemeManager.getTheme() === 'dark' ? iconSun : iconMoon}</span>
-            <span class="item-text">${ThemeManager.getTheme() === 'dark' ? 'Light theme' : 'Dark theme'}<span class="item-sub">Switch the colours</span></span>
+          <button role="menuitem" tabindex="-1" class="theme-item" @click="${this._cycleTheme}">
+            <span class="item-icon">${THEME_ICONS[ThemeManager.getPreference()] || iconThemeDevice}</span>
+            <span class="item-text">Colours: ${THEME_NAMES[ThemeManager.getPreference()] || THEME_NAMES.device}<span class="item-sub">Switch to ${THEME_NAMES[nextPref(ThemeManager.getPreference())]}</span></span>
           </button>
         </div>
       ` : ''}

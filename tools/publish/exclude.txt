@@ -1,5 +1,6 @@
 # Authoring-only files left out of a published series (stage-series.mjs).
-# One pattern per line: a bare name matches a file or folder at any depth; "*.ext" matches by suffix.
+# One pattern per line: a bare name matches a file or folder at any depth; "*.ext" matches by suffix;
+# a pattern with "/" matches a path from the bundle root (for example story/cast).
 _work
 source
 review
@@ -31,3 +32,14 @@ build
 cells-module
 SoundArt.md
 AlgoKit.md
+# Q-54 (2026-11-11): course reference notes, source art and image scripts. Checked: no runtime file
+# (lessons, blocks, questions, modules, simulations, manifest, story/cast.json) loads anything below.
+reference
+IMAGE-PROMPTS.md
+MEDIA-TODO.md
+MEDIA-LOADING.md
+MANIFEST.md
+CAST-MAP.md
+PLACEHOLDERS.md
+*.py
+story/cast

@@ -62,7 +62,7 @@ const kick = (text, cls = '') => h('div', `kick${cls ? ' ' + cls : ''}`, text);
 const labelled = (cls, label, text) => {
   const d = h('div', cls);
   d.appendChild(h('span', 'kick', label));
-  d.appendChild(document.createTextNode(text));
+  d.appendChild(h('span', 'val', text));
   return d;
 };
 
@@ -93,8 +93,10 @@ function renderSteps(spec, ctx, box, w, forceVertical) {
   const avail = w - arrows * 26 - (spec.gate ? 190 : 0);
   const per = avail / (items.length + (spec.after ? 0.75 : 0));
   const minPer = items.some((i) => i.text || i.entry) ? 104 : 96;
-  const vertical = forceVertical || per < minPer;
-  const row = h('div', `steps${vertical ? ' vertical' : ''}`);
+  // Plain in a side column (under 800 px) reads as a ruled ledger, one stage per
+  // row: words get the width and the stack fills the figure's height.
+  const vertical = forceVertical || per < minPer || (ctx.look === 'plain' && w < 800);
+  const row = h('div', `steps${vertical ? ' vertical' : ''}${vertical && ctx.look === 'plain' && w >= 560 ? ' ledger-wide' : ''}`);
   items.forEach((it, i) => {
     if (i > 0) row.appendChild(arrow(stepOf(it) > ctx.cur));
     const compact = vertical && !it.text && !it.entry;
@@ -143,15 +145,20 @@ function renderSteps(spec, ctx, box, w, forceVertical) {
 //   item { id, title, text, case? }, caseLabel?
 function renderPanels(spec, ctx, box, w) {
   const n = spec.items.length;
-  const cols = Math.max(1, Math.min(n, Math.floor(w / 170)));
-  const g = h('div', 'panels');
+  const ledger = ctx.look === 'plain' && w < 800;
+  const cols = ledger ? 1 : Math.max(1, Math.min(n, Math.floor(w / 170)));
+  const g = h('div', `panels${ledger ? ' ledger' : ''}${ledger && w >= 560 ? ' ledger-wide' : ''}`);
   g.style.setProperty('--cols', cols);
   spec.items.forEach((it, i) => {
     const c = itemCard(it, ctx);
     const t = h('span', 'tone');
     t.style.setProperty('--tone', tone(i + 1));
     c.appendChild(t);
-    c.appendChild(kick(`${String(i + 1).padStart(2, '0')} / ${n}`));
+    if (ledger) {
+      const k = h('div', 'kick');
+      k.appendChild(h('span', 'num', String(i + 1).padStart(2, '0')));
+      c.appendChild(k);
+    } else c.appendChild(kick(`${String(i + 1).padStart(2, '0')} / ${n}`));
     c.appendChild(h('h4', null, txt(it.title)));
     c.appendChild(h('p', 'body', txt(it.text)));
     if (it.case) c.appendChild(labelled('live', txt(spec.caseLabel) || 'The case', txt(it.case)));
@@ -299,6 +306,7 @@ function renderMultiples(spec, ctx, box, w) {
   box.appendChild(g);
   if (spec.aside && stepOf(spec.aside) <= ctx.cur) {
     const a = h('div', `aside${ctx.animate && stepOf(spec.aside) === ctx.cur ? ' in' : ''}`);
+    a.dataset.id = 'aside'; // a narration cue can show / focus it (focus.aside); figureFocus never picks it
     a.appendChild(h('span', 'kick', txt(spec.aside.label)));
     for (const t of spec.aside.tags || []) a.appendChild(h('span', 'tag', txt(t)));
     box.appendChild(a);
@@ -408,7 +416,7 @@ function placeNotes(spec, ctx, inner, lane, body, inline) {
  * Draws the figure into a skeleton made by figureHost.js.
  * @param {{ body: HTMLElement, inner: HTMLElement, lane: HTMLElement }} view
  * @param {object} spec the `figure` field
- * @param {{ cur: number, animate: boolean }} ctx cur = the 1-based slide STEP now showing
+ * @param {{ cur: number, animate: boolean, look?: string }} ctx cur = the 1-based slide STEP now showing
  */
 export function drawFigure(view, spec, ctx) {
   const render = FIGURE_LAYOUTS[spec?.layout];
@@ -425,6 +433,67 @@ export function drawFigure(view, spec, ctx) {
     if (over) { view.body.replaceChildren(); res = renderSteps(spec, ctx, view.body, w, true); }
   }
   placeNotes(spec, ctx, view.inner, view.lane, view.body, res.inlineNotes);
+}
+
+// -- focus: what the beat is about ---------------------------------------------
+// The focused part gets the signature edge and tint; every other shown part
+// dims to the muted ink (text stays 4.5:1). Ids: item ids, plus 'gate' and
+// 'after' on steps. Ghosts are never focused or dimmed.
+
+/** Every focusable id with the step it appears at. */
+function focusables(spec) {
+  const out = (spec?.items || []).map((it) => ({ id: String(it.id ?? ''), s: stepOf(it) })).filter((x) => x.id);
+  if (spec?.gate) out.push({ id: 'gate', s: stepOf(spec.gate) });
+  if (spec?.after) out.push({ id: 'after', s: stepOf(spec.after) });
+  return out;
+}
+
+/**
+ * The ids focused at slide STEP cur (1-based). `focus: [{ step, on }]` wins
+ * for its step (`on: []` = none at that step); `focus: false` turns focus off.
+ * Otherwise the newest arrivals, when older parts are already shown (so a
+ * figure that appears all at once has no focus), else the targets of this
+ * step's notes.
+ */
+export function figureFocus(spec, cur) {
+  if (!spec || spec.focus === false) return [];
+  const set = Array.isArray(spec.focus) ? spec.focus.filter((f) => f && stepOf(f) === cur).pop() : null;
+  if (set) return [].concat(set.on ?? []).map(String);
+  const shown = focusables(spec).filter((x) => x.s <= cur);
+  const fresh = shown.filter((x) => x.s === cur);
+  if (fresh.length && fresh.length < shown.length) return fresh.map((x) => x.id);
+  if (cur > 1) {
+    const ids = new Set(shown.map((x) => x.id));
+    return (spec.notes || []).filter((n) => stepOf(n) === cur && ids.has(String(n.on))).map((n) => String(n.on));
+  }
+  return [];
+}
+
+/**
+ * A narration cue id as figure focus: 'focus.<id>' or 'focus:<id>' (several
+ * ids joined with '+' or ','), 'focus.none' clears to nothing, a bare item id focuses
+ * that item. Returns the id list, or null when the cue is not about this figure.
+ */
+export function figureCueFocus(spec, cueId) {
+  const all = new Set(focusables(spec).map((x) => x.id));
+  if (spec?.aside) all.add('aside'); // cue-only: text-mode focus (figureFocus) is unchanged
+  const m = /^focus[.:](.+)$/.exec(String(cueId || ''));
+  if (m) return m[1] === 'none' ? [] : m[1].split(/[+,]/).filter((id) => all.has(id));
+  return all.has(String(cueId)) ? [String(cueId)] : null;
+}
+
+/** Marks the focused parts (.on) and the figure (data-focus) in a drawn body. */
+export function applyFigureFocus(root, body, ids) {
+  const want = new Set(ids || []);
+  let any = false;
+  body.querySelectorAll('[data-id]').forEach((e) => {
+    const host = e.classList.contains('tl-track') ? e.parentNode : e;
+    const on = want.has(e.dataset.id) && host.getAttribute('aria-hidden') !== 'true' && !e.classList.contains('ghost');
+    host.classList.toggle('on', on);
+    if (on) any = true;
+  });
+  // narr-rest (narration, Q-77): nothing lit, all dimmed.
+  if (any || want.has('narr-rest')) root.dataset.focus = ''; else delete root.dataset.focus;
 }
 
 /** What a screen reader hears when the author gave no a11yCaption: what is shown at this step. */
@@ -667,6 +736,36 @@ export const FIGURE_CSS = `
 .verdict span { box-shadow: inset 0 -0.45em 0 var(--f-sig-tint); }
 .root[data-setting="casefile"] .verdict { background: var(--f-card); padding: 8px 10px; }
 
+/* focus (figureFocus): the beat's part gets the signature edge, the rest the
+   muted ink (text stays 4.5:1); a cue or a new beat moves it over 250 ms. */
+.card, .gate .g, .tl-row .who, .tl-row .who b, .card h4, .card p, .card .entry, .card .live, .card .num, .note { transition: color 0.25s ease, border-color 0.25s ease, background-color 0.25s ease, box-shadow 0.25s ease; }
+.glyph, .card > svg, .tl-bar, .tl-start, .card .val { transition: opacity 0.25s ease, background-color 0.25s ease, color 0.25s ease; }
+.root[data-focus] .card:not(.on):not(.ghost) :is(h4, p, .entry, .live, .val, .kick),
+.root[data-focus] .card.after:not(.on):not(.ghost) h4 { color: var(--f-muted); }
+.root[data-focus] .card:not(.on):not(.ghost) :is(.glyph, svg) { opacity: 0.45; }
+.root[data-focus] .card:not(.on):not(.ghost) .num { background: var(--f-muted); }
+.root[data-focus] .gate:not(.on):not(.ghost) .g { color: var(--f-muted); }
+.root[data-focus] .tl-row:not(.on) :is(.who, .who b) { color: var(--f-muted); }
+.root[data-focus] .tl-row:not(.on) .tl-bar:not(.ghost) { background: color-mix(in oklab, var(--tone) 35%, var(--f-ground)); }
+.root[data-focus] .tl-row:not(.on) .tl-start { color: var(--f-ink); }
+/* Narrated (figureHost narrationFocus, spec W1 D29n): a part held for its show cue keeps its room,
+   unseen, and fades in at its word; the parts not being spoken about step further back. */
+.narr-held { opacity: 0 !important; visibility: hidden; }
+.root[data-narrated] :is(.card, .gate, .tl-row) { transition: opacity 0.3s ease, color 0.25s ease, border-color 0.25s ease, background-color 0.25s ease, box-shadow 0.25s ease; }
+.root[data-narrated][data-focus] :is(.card, .gate, .tl-row):not(.on):not(.ghost) { opacity: 0.4; }
+/* Narrated: slots for stages still to come stay out of sight (they keep their room). */
+.root[data-narrated] .ghost { visibility: hidden; }
+/* The multiples aside (Also called ...) as a cue target (Q-84): dimmed with the rest, lit when spoken. */
+.root[data-narrated] .aside { transition: opacity 0.3s ease; }
+.root[data-narrated][data-focus] .aside:not(.on) { opacity: 0.4; }
+.root[data-narrated] .aside.on .tag { border-color: var(--f-sig); color: var(--f-ink); }
+.root[data-narrated] .aside.on > .kick { color: var(--f-sig); }
+@media (prefers-reduced-motion: reduce) { .root[data-narrated] :is(.card, .gate, .tl-row) { transition: none; } }
+.card.on { border-color: var(--f-sig); }
+.root[data-look="quill"] .card.on { box-shadow: 0 3px 0 var(--f-sig); }
+.gate.on .g { box-shadow: 0 0 0 2px var(--f-sig); }
+.tl-row.on .who b { color: var(--f-sig); }
+
 /* plain (editorial, look pack plain SPEC): rules, not boxes; kickers, labels and
    titles in the body sans (the serif only at 24 px and up: the step numerals);
    no monospace, no ruled paper. Listed last so it wins over the casefile rules. */
@@ -700,6 +799,46 @@ export const FIGURE_CSS = `
 .root[data-look="plain"] .aside .tag { border-radius: 2px; font-family: var(--f-body); }
 .root[data-look="plain"] .aside > .kick { color: var(--f-muted); }
 .root[data-look="plain"] .verdict { background: transparent; padding: 8px 0 0; font: 600 17px/1.35 var(--f-body); }
+
+/* plain, editorial hierarchy: one headline per item, the rest muted; bigger
+   words; the folder tab only when the author wrote one. */
+.root[data-look="plain"][data-setting="casefile"] .fig[data-tab=""] { margin-top: 0; }
+.root[data-look="plain"][data-setting="casefile"] .fig[data-tab=""]::before { display: none; }
+.root[data-look="plain"] .card h4 { font: 600 17px/1.25 var(--f-body); letter-spacing: -0.005em; }
+.root[data-look="plain"] .card p { font-size: 15px; line-height: 1.45; color: var(--f-muted); }
+.root[data-look="plain"] .card .entry { border-top: 0; margin-top: 8px; padding-top: 0; font-size: 15px; line-height: 1.4; }
+.root[data-look="plain"] .card .entry .kick, .root[data-look="plain"] .panels .live .kick { display: block; color: var(--f-sig); margin-bottom: 3px; }
+.root[data-look="plain"] .card .val { padding: 1px 0; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
+.root[data-look="plain"] .card.on .val { background: var(--highlight, var(--f-sig-tint)); color: var(--highlight-ink, var(--f-ink)); padding: 1px 3px; }
+.root[data-look="plain"] .card.on { border-top: 3px solid var(--f-sig); background-color: color-mix(in oklab, var(--f-sig-tint) 30%, transparent); box-shadow: none; }
+.root[data-look="plain"][data-focus] .card:not(.on):not(.ghost) { border-top-color: var(--f-edge); }
+.root[data-look="plain"][data-focus] .card:not(.on):not(.ghost) .num { background: none; color: var(--f-muted); }
+.root[data-look="plain"] .note { background: transparent; border-left: 2px solid var(--f-sig); padding: 2px 0 2px 10px; font-size: 14px; line-height: 1.35; }
+.root[data-look="plain"] .note.lane { background: var(--f-ground); }
+.root[data-look="plain"] .panels .live { background: transparent; border-left: 2px solid var(--f-sig); padding: 2px 0 2px 10px; font-size: 15px; line-height: 1.4; }
+/* plain ledger: steps and panels in a side column, one ruled row per item,
+   a serif numeral in the margin (26 px and up, SPEC sec 2). */
+.root[data-look="plain"] :is(.steps.vertical > .card:not(.compact), .panels.ledger .card) { display: grid; grid-template-columns: 48px minmax(0, 1fr); column-gap: 10px; align-content: start; padding: 12px 2px 16px; }
+.root[data-look="plain"] :is(.steps.vertical > .card:not(.compact), .panels.ledger .card) > :not(.kick) { grid-column: 2; }
+.root[data-look="plain"] :is(.steps.vertical > .card:not(.compact), .panels.ledger .card) > .kick { grid-column: 1; grid-row: 1 / span 4; align-self: start; }
+.root[data-look="plain"] :is(.steps.vertical, .panels.ledger) .num { display: block; min-width: 0; height: auto; margin: 0; padding: 0; border-radius: 0; background: none; color: var(--f-sig); font: 400 36px/0.9 var(--f-head); font-variant-numeric: lining-nums; }
+.root[data-look="plain"] :is(.steps.vertical, .panels.ledger) .card h4 { font: 500 20px/1.25 var(--f-body); margin: 0 0 4px; }
+.root[data-look="plain"] :is(.steps.vertical, .panels.ledger) .card.ghost .num { color: var(--f-ghost); }
+/* wide ledger (560 px and up): the case line moves to its own column, so a row is one line pair, not four */
+.root[data-look="plain"] :is(.steps.vertical.ledger-wide > .card:not(.compact), .panels.ledger.ledger-wide .card) { grid-template-columns: 48px minmax(0, 1.15fr) minmax(0, 1fr); column-gap: 14px; }
+.root[data-look="plain"] :is(.steps.vertical.ledger-wide > .card:not(.compact), .panels.ledger.ledger-wide .card) > :is(.entry, .live) { grid-column: 3; grid-row: 1 / span 3; align-self: start; margin-top: 2px; }
+.root[data-look="plain"] .panels.ledger { gap: 4px; }
+.root[data-look="plain"] .panels.ledger .tone { display: none; }
+.root[data-look="plain"] .steps.vertical .arrow { justify-content: start; place-items: center start; padding-left: 12px; }
+.root[data-look="plain"] .steps.vertical .arrow path { stroke: var(--f-edge); }
+.root[data-look="plain"] .steps.vertical > .card.ghost { padding-block: 10px; }
+.root[data-look="plain"] .tl-row .who { font-size: 14px; color: var(--f-muted); }
+.root[data-look="plain"] .tl-row .who b { font: 600 16px/1.25 var(--f-body); color: var(--f-ink); }
+.root[data-look="plain"] .tl-row.on .who b { color: var(--f-sig); }
+.root[data-look="plain"] .mult .card h4 { font-size: 17px; }
+.root[data-look="plain"] .cmp .card h4 { font: 500 20px/1.25 var(--f-body); }
+.root[data-look="plain"] .verdict { font: 400 24px/1.3 var(--f-head); text-align: left; padding-top: 14px; border-top: 1px solid var(--f-edge); }
+.root[data-look="plain"] .verdict span { box-shadow: none; background: var(--highlight, var(--f-sig-tint)); color: var(--highlight-ink, var(--f-ink)); padding: 0 4px; -webkit-box-decoration-break: clone; box-decoration-break: clone; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

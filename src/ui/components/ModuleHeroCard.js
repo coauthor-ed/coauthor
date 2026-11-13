@@ -6,6 +6,10 @@ import { GamificationMixin } from '../../core/mixins/GamificationMixin.js';
 import { LookMixin } from '../../core/mixins/LookMixin.js';
 import './LookSlots.js';
 
+// Q-46 (battery, PM decision D26c): the hero companion bobs for three cycles of
+// hero-bob (4.2 s), then rests; a tap, a cue or a route change wakes him.
+const HERO_IDLE_MS = 3 * 4200;
+
 /**
  * <module-hero-card>: the Classic "continue" hero (prototype v2 a/ .hero-card).
  * One card per module: art tile with the look's companion, kicker, title, tagline, progress
@@ -186,13 +190,18 @@ export class ModuleHeroCard extends LookMixin(GamificationMixin(LitElement)) {
     this.coverSubject = '';
   }
 
+  /** A tap anywhere on the art tile gives the companion another round of idle motion. */
+  _wakeCompanion() {
+    this.renderRoot?.querySelector('.hero-art companion-slot')?.companion?.wake?.();
+  }
+
   render() {
     const pct = Math.round(Math.max(0, Math.min(1, this.progress || 0)) * 100);
     const title = this.primary ? html`<h1>${this.heading}</h1>` : html`<h2>${this.heading}</h2>`;
     return html`
       <section class="hero-card">
-        <div class="hero-art" aria-hidden="true">
-          <companion-slot size="sm" expression="happy"></companion-slot>
+        <div class="hero-art" aria-hidden="true" @pointerdown=${this._wakeCompanion}>
+          <companion-slot size="sm" expression="happy" rest-after=${HERO_IDLE_MS}></companion-slot>
         </div>
         ${this.look === 'plain' ? html`
           <div class="hero-cover">

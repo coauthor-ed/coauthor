@@ -5,14 +5,15 @@ import { gradeLabel } from '../../core/gradeLabel.js';
 import { ProgressStore } from '../../core/ProgressStore.js';
 import { DEFAULT_SHOWCASE_SOURCES } from '../../config/defaultShowcaseSources.js';
 import { btn3dStyles } from '../sharedStyles.js';
+import { iconShare, iconChevronRight, iconArrowLeft, iconCheck, iconClock, iconDownload } from '../icons/uiIcons.js';
 import { showParentalGateHold } from '../components/GateHoldDialog.js';
-import '../components/MarkdownRenderer.js';
 import { LookMixin } from '../../core/mixins/LookMixin.js';
 import { i18n } from '../../core/i18nProvider.js';
 import { needsNewerEngine } from '../../core/engineVersion.js';
+import { INDEPENDENCE_NOTE, SUBJECT_NAMES, syllabusAlignment } from '../../core/showcaseMeta.js';
 import {
-  resolveCatalogUrl, loadCatalog, loadCatalogEntries, wrapPreviewEntry, filterEntries, sortEntries,
-  buildFacets, buildCollections, loadDetail, countInstall,
+  resolveCatalogUrl, loadCatalog, loadCatalogEntries, wrapPreviewEntry, countInstall,
+  groupByBundle, loadBundleInfo, loadFacts, entryShowcase, bundleManifestUrl,
 } from '../../core/CatalogService.js';
 
 /** i18n with an English fallback: i18n.t returns the key itself when the strings file has no entry. */
@@ -25,60 +26,56 @@ const t = (key, fallback, params = {}) => {
 };
 
 const cap = (s) => (s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : '');
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const subjectName = (s) => SUBJECT_NAMES[String(s || '').toLowerCase()] || cap(s);
 
-/** A language code as a readable name ("hi" -> "Hindi"); the code itself when the browser cannot name it. */
-function languageName(code) {
-  try {
-    const n = new Intl.DisplayNames([i18n.currentLocale || 'en'], { type: 'language' }).of(code);
-    return n && n !== code ? n : String(code).toUpperCase();
-  } catch { return String(code).toUpperCase(); }
-}
-
-const AUDIENCE_LABELS = { school: ['discover.audience.school', 'School'], college: ['discover.audience.college', 'College'], adult: ['discover.audience.adult', 'Adult'] };
-const FEATURE_LABELS = {
-  narration: ['discover.feature.narration', 'Narrated'],
-  story: ['discover.feature.story', 'Story'],
-  games: ['discover.feature.games', 'Games'],
-  practice: ['discover.feature.practice', 'Practice'],
-};
 const LABEL_BADGES = {
   core: ['discover.badge.core', 'Core', 'discover.badge.core_hint', 'Part of the core CoAuthor library'],
   checked: ['discover.badge.checked', 'Checked', 'discover.badge.checked_hint', 'Checked by the catalog team'],
   outside: ['discover.badge.outside', 'Outside', 'discover.badge.outside_hint', 'From an outside author, not checked by the catalog team'],
 };
 
+const SPEAKER = html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h3l4-3v10l-4-3H2z" fill="currentColor"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+const BOOKMARK = html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 2.5h8v11l-4-2.6-4 2.6z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>`;
+const PLAY = html`<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>`;
+
 /**
- * <discover-view> - a browsable showcase of courses/question-banks a
- * student can *see* but only a parent (via the existing press-and-hold
- * gate) can actually add. See docs/sprints/completed/bookshelf-discover-
- * and-identity-groundwork.md. Reuses CourseSourceManager's existing
- * preview-without-registering semantics (previewBundleManifest/
- * previewManifest) so browsing needs no trust ceremony of its own - it's
- * read-only metadata, no code execution, unlike actually registering a
- * source.
- *
- * Layout (2026-11-09): a small course shop. Filter chips, then the
- * catalog's collections as rows that scroll sideways inside themselves,
- * then every course as a card grid. Details open as a modal sheet (hero
- * cover, screenshots, clip, intro, metadata, "Add to my shelf").
+ * <discover-view> - the course shop, laid out like an app store (Q-47, D22,
+ * D29). Three pages on one element, picked by `sub` (the hash after
+ * #/discover/):
+ *   ''                -> home: one row per bundle (a published course repo),
+ *                        "Add all", and side-scrolling module cards
+ *   'bundle/<id>'     -> the bundle page: hero, facts, Add all, modules list
+ *   'module/<id>'     -> the module page: header, facts, Add, screenshots and
+ *                        clip, about + highlights, lessons, details, more
+ * Adding goes through a parent (press-and-hold gate, once per visit), then
+ * CourseSourceManager.addSource + ProgressStore.enroll, as before.
+ * Store-page data: catalog.json rows (+ optional `bundles`), each manifest's
+ * showcase fields (src/core/showcaseMeta.js, shared with make-landing.mjs),
+ * and facts derived from the content (lessons, Narrated, syllabus line).
  */
 export class DiscoverView extends LookMixin(LitElement) {
   static styles = [btn3dStyles, css`
     :host {
-      display: flex;
-      flex-direction: column;
-      max-width: 1060px;
+      display: block;
+      max-width: 1120px;
       margin: 0 auto;
       width: 100%;
       box-sizing: border-box;
       padding: var(--space-4) var(--space-4) var(--space-7);
       min-width: 0;
+      --ds-gutter: var(--space-4);
+      --ds-card-w: clamp(212px, 62vw, 252px);
+      --ds-shot-h: clamp(300px, 86vw, 380px);
     }
     *, *::before, *::after { box-sizing: border-box; }
+    a { color: inherit; }
+    h1, h2, h3, p { margin: 0; }
+    a:focus-visible, button:focus-visible, video:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 
-    /* ---------- head ---------- */
-    .page-head { margin: var(--space-2) 0 var(--space-5); }
-    .page-kicker {
+    /* ---------- page head (home) ---------- */
+    .page-head { margin: var(--space-2) 0 var(--space-6); }
+    .kicker {
       font-family: var(--font-ui);
       font-weight: var(--fw-heavy);
       font-size: var(--fs-kicker);
@@ -87,16 +84,11 @@ export class DiscoverView extends LookMixin(LitElement) {
       color: var(--primary-text);
       margin: 0 0 var(--space-1);
     }
-    .page-title {
-      font-size: var(--fs-h1);
-      line-height: var(--lh-tight);
-      margin: 0 0 var(--space-2);
-      font-family: var(--font-heading);
-    }
-    .page-subtitle { margin: 0; color: var(--text-muted); max-width: 60ch; }
+    .page-title { font-family: var(--font-heading); font-size: var(--fs-h1); line-height: var(--lh-tight); margin-bottom: var(--space-2); }
+    .page-subtitle { color: var(--text-muted); max-width: 60ch; }
     .catalog-offline {
       display: inline-block;
-      margin: var(--space-3) 0 0;
+      margin-top: var(--space-3);
       font-size: var(--fs-small);
       color: var(--info-text);
       background: var(--info-bg);
@@ -104,367 +96,401 @@ export class DiscoverView extends LookMixin(LitElement) {
       padding: 4px 12px;
     }
 
-    /* ---------- filter chips: flat, a rim and a solid lip, no gloss ---------- */
-    .filters {
-      display: flex;
-      flex-direction: column;
-      gap: var(--space-2);
-      margin: 0 0 var(--space-5);
-      min-width: 0;
-    }
-    .filter-group {
-      display: flex;
-      align-items: center;
-      gap: var(--space-2);
-      overflow-x: auto;
-      scrollbar-width: none;
-      padding: 2px 0 6px;
-      min-width: 0;
-    }
-    .filter-group::-webkit-scrollbar { display: none; }
-    .filter-label {
-      flex: none;
-      min-width: 4.5rem;
-      font-family: var(--font-ui);
-      font-weight: var(--fw-heavy);
-      font-size: var(--fs-kicker);
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
-      color: var(--text-muted);
-    }
-    .chip {
-      flex: none;
-      font-family: var(--font-ui);
-      font-weight: var(--fw-heavy);
-      font-size: var(--fs-small);
-      line-height: 1.2;
-      padding: 7px 14px;
-      border-radius: var(--radius-pill);
-      border: var(--rule-w) solid var(--border-color);
-      background: var(--bg-surface);
-      color: var(--text-main);
-      box-shadow: var(--lip) var(--lip-color);
-      cursor: pointer;
-      transition: transform var(--motion-fast), background var(--motion-fast), color var(--motion-fast);
-    }
-    .chip:hover { border-color: var(--border-hover); }
-    .chip[aria-pressed="true"] {
-      background: var(--primary-color);
-      border-color: var(--primary-hover);
-      color: var(--on-primary);
-      box-shadow: var(--lip) var(--primary-hover);
-    }
-    .chip:active { transform: translateY(var(--press-travel-sm, 3px)); box-shadow: none; }
-    .chip:focus-visible, .sort-select:focus-visible, .tile:focus-visible, .cover-btn:focus-visible, .sheet-close:focus-visible {
-      outline: var(--focus-ring);
-      outline-offset: var(--focus-ring-offset);
-    }
-    .chip-clear { background: transparent; color: var(--primary-text); box-shadow: none; border-style: dashed; }
-
-    /* ---------- section heads ---------- */
-    .section-head {
-      display: flex;
-      align-items: baseline;
-      justify-content: space-between;
-      gap: var(--space-3);
-      flex-wrap: wrap;
-      margin: 0 0 var(--space-3);
-    }
-    .section-title, .collection-title {
-      font-family: var(--font-heading);
-      font-size: var(--fs-h3);
-      margin: 0;
-    }
-    .count { color: var(--text-muted); font-weight: var(--fw-medium); font-size: var(--fs-small); margin-left: var(--space-2); }
-    .filter-sort {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--space-2);
-      font-size: var(--fs-small);
-      font-weight: var(--fw-strong);
-      color: var(--text-muted);
-    }
-    .sort-select {
-      font: inherit;
-      font-family: var(--font-ui);
-      font-weight: var(--fw-heavy);
-      color: var(--text-main);
-      background: var(--bg-surface);
-      border: var(--rule-w) solid var(--border-color);
-      border-radius: var(--radius-pill);
-      box-shadow: var(--lip) var(--lip-color);
-      padding: 5px 10px;
-      cursor: pointer;
-    }
-
-    /* ---------- collections: rows that scroll inside themselves ---------- */
-    .collections { display: flex; flex-direction: column; gap: var(--space-5); margin: 0 0 var(--space-6); }
-    .collection { min-width: 0; }
-    .collection-title { margin-bottom: var(--space-2); }
-    .collection-list {
-      list-style: none;
-      display: flex;
-      gap: var(--space-3);
-      margin: 0 calc(-1 * var(--space-4));
-      padding: 4px var(--space-4) 12px;
-      overflow-x: auto;
-      scroll-snap-type: x mandatory;
-      scroll-padding-inline: var(--space-4);
-      scrollbar-width: thin;
-      overscroll-behavior-x: contain;
-    }
-    .collection-list > li { flex: 0 0 clamp(200px, 64vw, 232px); scroll-snap-align: start; display: flex; }
-    .tile {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      text-align: left;
-      font: inherit;
-      color: inherit;
-      padding: 0;
-      cursor: pointer;
+    /* ---------- featured bundle (home) ---------- */
+    .feature {
+      display: grid;
+      gap: 0;
+      margin: 0 0 var(--space-7);
+      border-radius: var(--radius-xl);
+      overflow: hidden;
       background: var(--surface-card);
       border: var(--rule-w) solid var(--border-color);
+      box-shadow: var(--press-2) var(--lip-color);
+    }
+    .feature-art { display: block; }
+    .feature-art .art { border: 0; border-radius: 0; box-shadow: none; }
+    .feature-text { display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-4) var(--space-4) var(--space-5); min-width: 0; }
+    .feature-title { font-family: var(--font-heading); font-size: var(--fs-h2); line-height: var(--lh-tight); }
+    .feature-title a { text-decoration: none; }
+    .feature-title a:hover { text-decoration: underline; }
+    .feature-blurb { color: var(--text-muted); max-width: 52ch; }
+    .feature .actions { margin-top: var(--space-2); }
+    .feature .actions a.btn-3d { text-decoration: none; }
+
+    /* ---------- bundle rows (home) ---------- */
+    .row { margin: 0 0 var(--space-7); min-width: 0; }
+    .row-head { display: flex; align-items: center; gap: var(--space-3); margin-bottom: var(--space-1); }
+    .row-link { display: flex; align-items: center; gap: var(--space-2); text-decoration: none; min-width: 0; flex: 1; padding: 4px 0; }
+    .row-title { font-family: var(--font-heading); font-size: var(--fs-h3); line-height: var(--lh-tight); }
+    .row-link svg { flex: none; color: var(--text-muted); transition: transform var(--motion-fast); }
+    .row-link:hover svg { transform: translateX(3px); color: var(--primary-text); }
+    .row-blurb { color: var(--text-muted); font-size: var(--fs-small); margin: 0 0 var(--space-3); max-width: 70ch; }
+    .row-meta { display: flex; flex-wrap: wrap; gap: 6px var(--space-3); align-items: center; margin: 0 0 var(--space-3); font-size: var(--fs-small); color: var(--text-muted); }
+
+    .rail-wrap { position: relative; }
+    .rail {
+      list-style: none;
+      display: flex;
+      gap: var(--space-4);
+      margin: 0 calc(-1 * var(--ds-gutter));
+      padding: 4px var(--ds-gutter) 14px;
+      overflow-x: auto;
+      scroll-snap-type: x mandatory;
+      scroll-padding-inline: var(--ds-gutter);
+      scrollbar-width: none;
+      overscroll-behavior-x: contain;
+    }
+    .rail::-webkit-scrollbar { display: none; }
+    .rail > li { flex: 0 0 var(--ds-card-w); scroll-snap-align: start; display: flex; min-width: 0; }
+    .rail-btn {
+      display: none;
+      position: absolute;
+      top: calc(var(--ds-card-w) * 0.28);
+      z-index: 2;
+      width: 40px;
+      height: 40px;
+      align-items: center;
+      justify-content: center;
+      border-radius: var(--radius-pill);
+      border: var(--rule-w) solid var(--border-color);
+      background: var(--bg-surface);
+      color: var(--text-main);
+      box-shadow: var(--lip) var(--lip-color), var(--shadow-md);
+      cursor: pointer;
+    }
+    .rail-btn.prev { left: -14px; }
+    .rail-btn.prev svg { transform: scaleX(-1); }
+    .rail-btn.next { right: -14px; }
+    @media (hover: hover) and (min-width: 900px) { .rail-btn { display: inline-flex; } }
+
+    /* module card: art on top, then title, one line, meta */
+    .card {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      width: 100%;
+      text-decoration: none;
+      color: inherit;
+      min-width: 0;
+    }
+    .art {
+      position: relative;
+      display: block;
+      aspect-ratio: 16 / 9;
       border-radius: var(--radius-lg);
-      box-shadow: var(--press-1) var(--lip-color);
       overflow: hidden;
+      border: var(--rule-w) solid var(--border-color);
+      box-shadow: var(--press-1) var(--lip-color);
+      background: var(--bg-panel-2);
       transition: transform var(--motion-fast) var(--ease-settle);
     }
-    .tile:hover { transform: translateY(var(--hover-lift)); }
-    .tile:active { transform: translateY(var(--press-travel-sm, 3px)); box-shadow: none; }
-    .tile .cover { height: 108px; }
-    .tile-body { padding: var(--space-3); display: flex; flex-direction: column; gap: 6px; flex: 1; }
-    .tile-title { font-family: var(--font-heading); font-weight: var(--heading-weight, 700); font-size: 1.02rem; line-height: var(--lh-tight); margin: 0; }
-    .tile-line { margin: 0; font-size: var(--fs-small); color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-
-    /* ---------- covers ---------- */
-    .cover {
-      position: relative;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 140px;
-      overflow: hidden;
-      color: var(--card-banner-ink);
-      background: var(--card-banner-bg, var(--gradient-banner));
-      border-bottom: var(--rule-w) solid var(--border-color);
-    }
-    .cover.biology   { background: var(--card-banner-bg, var(--gradient-teal)); }
-    .cover.physics   { background: var(--card-banner-bg, linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-violet) 100%)); }
-    .cover.chemistry { background: var(--card-banner-bg, var(--gradient-gold)); }
-    .cover.math      { background: var(--card-banner-bg, linear-gradient(135deg, var(--accent-violet) 0%, var(--accent-coral) 100%)); }
-    .cover img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-    .cover look-cover > * { position: absolute; inset: 0; }
-    .cover:has(look-cover > *) > .cover-icon { display: none; }
-    .cover-icon {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      width: 64px;
-      height: 64px;
-      font-size: 2.1rem;
-      border-radius: var(--radius-lg);
-      background: var(--card-banner-track);
-      box-shadow: var(--lip) var(--card-banner-track);
-      transition: transform var(--motion-base) var(--ease-spring);
-    }
-    .tile .cover-icon { width: 52px; height: 52px; font-size: 1.7rem; }
-    .card:hover .cover-icon, .tile:hover .cover-icon { transform: var(--card-icon-hover, scale(1.08) translateY(-2px)); }
-    .cover-btn { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: pointer; font: inherit; color: inherit; }
-
-    /* ---------- badges ---------- */
-    .badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
-    .badge {
+    .card:hover .art { transform: translateY(var(--hover-lift)); }
+    .card:active .art { transform: translateY(var(--press-travel-sm, 3px)); box-shadow: none; }
+    .art > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+    .card-title { font-family: var(--font-heading); font-weight: var(--heading-weight, 700); font-size: 1.02rem; line-height: var(--lh-tight); margin-top: 4px;
+      display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .card-line { font-size: var(--fs-small); color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; font-size: 0.8rem; font-weight: var(--fw-strong); color: var(--text-muted); }
+    .meta > span { display: inline-flex; align-items: center; gap: 4px; }
+    .meta svg { width: 13px; height: 13px; }
+    .meta .narr { color: var(--info-text); }
+    .on-shelf-tag {
+      position: absolute;
+      left: 8px;
+      top: 8px;
       display: inline-flex;
       align-items: center;
       gap: 4px;
       font-family: var(--font-ui);
       font-size: 0.72rem;
       font-weight: var(--fw-heavy);
-      letter-spacing: 0.02em;
-      line-height: 1.2;
-      padding: 3px 9px;
+      padding: 3px 9px 3px 7px;
       border-radius: var(--radius-pill);
-      background: var(--bg-panel-2);
-      color: var(--text-muted);
-      white-space: nowrap;
+      background: var(--success-bg);
+      color: var(--success-text);
     }
-    .badge svg { width: 12px; height: 12px; flex: none; }
-    .badge.core { background: var(--primary-light); color: var(--primary-text); }
-    .badge.checked { background: var(--success-bg); color: var(--success-text); }
-    .badge.outside { background: var(--bg-panel-2); color: var(--text-muted); }
-    .badge.update, .badge.draft { background: var(--warn-bg); color: var(--warn-text); }
-    .badge.narrated { background: var(--info-bg); color: var(--info-text); }
+    .on-shelf-tag svg { width: 12px; height: 12px; }
 
-    /* ---------- all-courses grid ---------- */
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(min(270px, 100%), 1fr));
-      gap: var(--space-5);
-    }
-    .card {
-      position: relative;
-      background: var(--surface-card);
-      border: var(--rule-w) solid var(--border-color);
-      border-radius: var(--radius-lg);
-      overflow: hidden;
+    /* generated art when a module has no cover */
+    .gen {
+      position: absolute;
+      inset: 0;
       display: flex;
-      flex-direction: column;
-      box-shadow: var(--press-1) var(--lip-color);
-      min-width: 0;
-      animation: arrive var(--motion-slow) var(--ease-spring) both;
+      align-items: center;
+      justify-content: center;
+      color: var(--card-banner-ink);
+      background: var(--card-banner-bg, var(--gradient-banner));
     }
-    @keyframes arrive {
-      from { opacity: 0; transform: translateY(var(--rise-distance, 8px)); }
-      to { opacity: 1; transform: none; }
+    .gen.biology   { background: var(--card-banner-bg, var(--gradient-teal)); }
+    .gen.physics   { background: var(--card-banner-bg, linear-gradient(135deg, var(--accent-blue) 0%, var(--accent-violet) 100%)); }
+    .gen.chemistry { background: var(--card-banner-bg, var(--gradient-gold)); }
+    .gen.math      { background: var(--card-banner-bg, linear-gradient(135deg, var(--accent-violet) 0%, var(--accent-coral) 100%)); }
+    .gen look-cover > * { position: absolute; inset: 0; }
+    .gen:has(look-cover > *) > .gen-icon { display: none; }
+    .gen-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 30%;
+      aspect-ratio: 1;
+      max-width: 72px;
+      font-size: clamp(1.4rem, 5vw, 2.1rem);
+      border-radius: var(--radius-lg);
+      background: var(--card-banner-track);
+      box-shadow: var(--lip) var(--card-banner-track);
     }
-    .card-body { padding: var(--space-4); display: flex; flex-direction: column; gap: var(--space-2); flex: 1; }
-    .card-type {
-      font-family: var(--font-ui);
-      text-transform: uppercase;
-      font-size: var(--fs-kicker);
-      font-weight: var(--fw-heavy);
-      letter-spacing: 0.1em;
-      color: var(--card-kicker, var(--primary-text));
-    }
-    .card h3 { margin: 0; font-size: 1.2rem; line-height: var(--lh-tight); font-family: var(--font-heading); }
-    .tagline { margin: 0; font-weight: var(--fw-strong); color: var(--text-main); }
-    .card-desc {
-      margin: 0;
-      font-size: var(--fs-small);
-      color: var(--text-muted);
-      display: -webkit-box;
-      -webkit-line-clamp: 3;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-    .card-footer { margin-top: auto; padding-top: var(--space-3); }
-    .footer-row { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; }
-    .on-shelf-badge {
+
+    /* ---------- buttons, badges ---------- */
+    .pill-add { white-space: nowrap; }
+    .on-shelf {
       display: inline-flex;
       align-items: center;
       gap: 6px;
+      font-family: var(--font-ui);
       font-size: var(--fs-small);
       font-weight: var(--fw-heavy);
       color: var(--success-text);
       background: var(--success-bg);
       padding: 8px 14px;
       border-radius: var(--radius-pill);
+      white-space: nowrap;
     }
-    .not-reviewed { font-size: var(--fs-small); color: var(--text-muted); }
-
-    .empty-state, .error-state, .no-match {
-      text-align: center;
-      padding: var(--space-7) var(--space-5);
-      background: var(--bg-surface);
-      border: var(--rule-w) dashed var(--border-hover);
-      border-radius: var(--radius-lg);
+    .on-shelf svg { width: 14px; height: 14px; }
+    .mod .on-shelf { padding: 6px 10px; font-size: 0.78rem; }
+    .badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-family: var(--font-ui);
+      font-size: 0.76rem;
+      font-weight: var(--fw-heavy);
+      line-height: 1.2;
+      padding: 4px 10px;
+      border-radius: var(--radius-pill);
+      background: var(--bg-panel-2);
       color: var(--text-muted);
+      white-space: nowrap;
     }
-    .no-match p { margin: 0 0 var(--space-3); }
+    .badge svg { width: 13px; height: 13px; flex: none; }
+    .badge.checked, .badge.core { background: var(--success-bg); color: var(--success-text); }
+    .badge.narrated { background: var(--info-bg); color: var(--info-text); }
+    .badge.update { background: var(--warn-bg); color: var(--warn-text); }
 
-    /* ---------- detail sheet (a modal dialog: top layer, so no ancestor transform can move it) ---------- */
-    dialog.sheet {
-      position: fixed;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      max-width: none;
-      max-height: none;
+    /* ---------- store pages: crumb, head, facts, actions ---------- */
+    .crumb { margin: 0 0 var(--space-4); }
+    .crumb a {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-family: var(--font-ui);
+      font-weight: var(--fw-heavy);
+      font-size: var(--fs-small);
+      color: var(--primary-text);
+      text-decoration: none;
+      padding: 6px 0;
+    }
+    .crumb svg { width: 16px; height: 16px; }
+
+    .facts {
+      display: flex;
+      list-style: none;
       margin: 0;
-      padding: 0;
-      border: 0;
-      background: transparent;
+      padding: var(--space-3) 0;
+      overflow-x: auto;
+      scrollbar-width: none;
+    }
+    .facts::-webkit-scrollbar { display: none; }
+    .facts li {
+      flex: 1 0 auto;
+      min-width: 84px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 0 var(--space-3);
+      text-align: center;
+    }
+    .facts li + li { border-left: var(--rule-w-fixed, 1px) solid var(--border-color); }
+    .fact-v { font-family: var(--font-heading); font-weight: var(--heading-weight, 700); font-size: 1.08rem; line-height: 1.2; white-space: nowrap; display: inline-flex; align-items: center; gap: 4px; }
+    .fact-v svg { width: 16px; height: 16px; color: var(--text-muted); }
+    .fact-k { font-size: 0.76rem; color: var(--text-muted); white-space: nowrap; }
+
+    .actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
+    .actions .add-main { flex: 1 1 220px; justify-content: center; }
+    .actions .on-shelf { flex: 1 1 220px; justify-content: center; padding: 12px 16px; font-size: var(--fs-body); }
+    .share-btn { display: inline-flex; align-items: center; gap: var(--space-2); }
+    .gate-hint { font-size: var(--fs-small); color: var(--text-muted); margin-top: var(--space-2); }
+
+    .align {
+      display: flex;
+      align-items: flex-start;
+      gap: var(--space-2);
+      font-size: var(--fs-small);
+      font-weight: var(--fw-strong);
       color: var(--text-main);
-      overflow: hidden;
     }
-    dialog.sheet::backdrop { background: transparent; }
-    .scrim { position: absolute; inset: 0; background: var(--scrim); animation: fade var(--motion-base) ease-out both; }
-    .sheet-panel {
-      position: absolute;
-      left: 50%;
-      top: 50%;
-      transform: translate(-50%, -50%);
-      width: min(760px, calc(100% - 2 * var(--space-5)));
-      max-height: calc(100% - 2 * var(--space-6));
-      overflow-y: auto;
-      overscroll-behavior: contain;
-      background: var(--bg-surface);
-      border: var(--rule-w) solid var(--border-color);
-      border-radius: var(--radius-xl);
-      box-shadow: var(--press-2) var(--lip-color), var(--shadow-lg);
-      animation: sheet-in var(--motion-slow) var(--ease-spring) both;
+    .align svg { width: 16px; height: 16px; flex: none; margin-top: 2px; color: var(--primary-text); }
+
+    .sec { margin-top: var(--space-6); min-width: 0; }
+    .sec-title {
+      font-family: var(--font-heading);
+      font-size: var(--fs-h3);
+      line-height: var(--lh-tight);
+      margin-bottom: var(--space-3);
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-2);
     }
-    @keyframes sheet-in {
-      from { opacity: 0; transform: translate(-50%, calc(-50% + 16px)) scale(0.98); }
-      to { opacity: 1; transform: translate(-50%, -50%); }
-    }
-    @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
-    .sheet-close {
-      position: absolute;
-      top: var(--space-3);
-      right: var(--space-3);
-      z-index: 2;
-      width: 40px;
-      height: 40px;
+    .sec-title .count { font-family: var(--font-family); font-size: var(--fs-small); font-weight: var(--fw-medium); color: var(--text-muted); }
+    .prose { line-height: var(--lh-body); max-width: 68ch; }
+    .blurb-strong { font-weight: var(--fw-strong); margin-bottom: var(--space-2); }
+
+    .highlights { list-style: none; margin: var(--space-4) 0 0; padding: 0; display: grid; gap: var(--space-3); max-width: 68ch; }
+    .highlights li { display: grid; grid-template-columns: 28px 1fr; gap: var(--space-3); align-items: start; line-height: var(--lh-body); }
+    .hl-mark {
+      width: 28px;
+      height: 28px;
+      border-radius: var(--radius-pill);
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      border-radius: var(--radius-pill);
-      border: var(--rule-w) solid var(--border-color);
-      background: var(--bg-surface);
-      color: var(--text-main);
-      box-shadow: var(--lip) var(--lip-color);
-      cursor: pointer;
+      background: var(--primary-light);
+      color: var(--primary-text);
     }
-    .sheet-close svg { width: 18px; height: 18px; }
-    .sheet-close:active { transform: translateY(var(--press-travel-sm, 3px)); box-shadow: none; }
-    .sheet-hero .cover { height: clamp(160px, 30vw, 240px); border-radius: 0; }
-    .sheet-hero .cover-icon { width: 92px; height: 92px; font-size: 3rem; border-radius: var(--radius-xl); }
-    .sheet-body { padding: var(--space-5); display: flex; flex-direction: column; gap: var(--space-4); }
-    .sheet-head { display: flex; flex-direction: column; gap: var(--space-2); }
-    .sheet-title { font-family: var(--font-heading); font-size: var(--fs-h2); line-height: var(--lh-tight); margin: 0; }
-    .sheet-tagline { margin: 0; font-size: 1.05rem; font-weight: var(--fw-strong); color: var(--text-muted); }
-    .sheet-action { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); }
-    .sheet-action .hint { font-size: var(--fs-small); color: var(--text-muted); }
-    .sheet h3 {
-      font-family: var(--font-ui);
-      font-size: var(--fs-kicker);
-      font-weight: var(--fw-heavy);
-      letter-spacing: 0.12em;
-      text-transform: uppercase;
+    .hl-mark svg { width: 16px; height: 16px; }
+
+    .indep {
+      margin-top: var(--space-7);
+      padding-top: var(--space-4);
+      border-top: var(--rule-w-fixed, 1px) solid var(--border-color);
+      font-size: 0.8rem;
       color: var(--text-muted);
-      margin: 0 0 var(--space-2);
     }
-    .details { display: flex; flex-direction: column; gap: var(--space-5); }
-    .details[data-state="loading"] { min-height: 120px; align-items: center; justify-content: center; color: var(--text-muted); }
-    .detail-description { margin: 0; line-height: var(--lh-body); }
+
+    /* ---------- bundle page ---------- */
+    .hero { display: grid; gap: var(--space-4); }
+    .hero .art { border-radius: var(--radius-xl); }
+    .hero-text { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+    .title { font-family: var(--font-heading); font-size: var(--fs-h1); line-height: var(--lh-tight); }
+    .by { font-family: var(--font-ui); font-weight: var(--fw-heavy); font-size: var(--fs-small); color: var(--primary-text); text-decoration: none; }
+    a.by:hover { text-decoration: underline; }
+    .sub { font-size: var(--fs-small); color: var(--text-muted); }
+    .lead { font-size: 1.06rem; font-weight: var(--fw-strong); color: var(--text-main); }
+
+    .mods { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
+    .mod {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-3);
+      border-radius: var(--radius-lg);
+      background: var(--surface-card);
+      border: var(--rule-w) solid var(--border-color);
+      box-shadow: var(--press-1) var(--lip-color);
+    }
+    .mod-link { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: var(--space-3); align-items: center; text-decoration: none; min-width: 0; }
+    .mod-link .art { border-radius: var(--radius-md); box-shadow: none; }
+    .mod-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+    .mod-title { font-family: var(--font-heading); font-weight: var(--heading-weight, 700); line-height: var(--lh-tight); }
+    .mod-line { font-size: var(--fs-small); color: var(--text-muted); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
+    /* ---------- module page ---------- */
+    .app-head { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-4); align-items: center; }
+    .icon {
+      position: relative;
+      width: 84px;
+      height: 84px;
+      border-radius: var(--radius-xl);
+      overflow: hidden;
+      border: var(--rule-w) solid var(--border-color);
+      box-shadow: var(--press-1) var(--lip-color);
+      background: var(--bg-panel-2);
+    }
+    .icon > img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+    .icon .gen-icon { width: 60%; font-size: 1.8rem; box-shadow: none; }
+    .head-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .head-text .title { font-size: var(--fs-h2); }
+
     .shots {
+      list-style: none;
       display: flex;
       gap: var(--space-3);
+      margin: 0 calc(-1 * var(--ds-gutter));
+      padding: 4px var(--ds-gutter) 12px;
       overflow-x: auto;
-      margin: 0 calc(-1 * var(--space-5));
-      padding: 2px var(--space-5) 10px;
       scroll-snap-type: x mandatory;
-      scroll-padding-inline: var(--space-5);
+      scroll-padding-inline: var(--ds-gutter);
       overscroll-behavior-x: contain;
+      scrollbar-width: thin;
     }
-    .shots figure { margin: 0; flex: 0 0 auto; scroll-snap-align: start; display: flex; flex-direction: column; gap: 6px; }
-    .shots img {
-      height: 190px;
-      width: auto;
-      max-width: 78vw;
-      object-fit: cover;
-      border: var(--rule-w) solid var(--border-color);
-      border-radius: var(--radius-md);
-      background: var(--bg-panel-2);
+    .shots > li { flex: none; scroll-snap-align: start; }
+    .shot {
+      position: relative;
       display: block;
+      height: var(--ds-shot-h);
+      aspect-ratio: 390 / 844;
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      border: var(--rule-w) solid var(--border-color);
+      background: var(--bg-panel-2);
+      margin: 0;
     }
-    .shots figcaption { font-size: var(--fs-small); color: var(--text-muted); max-width: 260px; }
-    .detail-clip { width: 100%; max-height: 360px; border-radius: var(--radius-md); border: var(--rule-w) solid var(--border-color); background: var(--bg-sunken); display: block; }
-    .meta-list {
+    /* A landscape screenshot (story art, a wide scene) keeps the rail height and gets a wider tile. */
+    .shot.land { aspect-ratio: 16 / 10; }
+    .shot img, .shot video { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .shot figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: var(--space-2) var(--space-3); font-size: 0.78rem; background: var(--bg-surface); color: var(--text-main); border-top: var(--rule-w-fixed, 1px) solid var(--border-color); }
+    .play {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-2);
+      border: 0;
+      padding: 0;
+      background: var(--reveal-scrim, var(--scrim));
+      color: var(--text-main);
+      cursor: pointer;
+      font: inherit;
+    }
+    .play-dot {
+      width: 64px;
+      height: 64px;
+      border-radius: var(--radius-pill);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--bg-surface);
+      color: var(--primary-text);
+      box-shadow: var(--lip) var(--lip-color), var(--shadow-md);
+    }
+    .play-dot svg { width: 30px; height: 30px; margin-left: 4px; }
+    .play-label { font-family: var(--font-ui); font-weight: var(--fw-heavy); font-size: var(--fs-small); background: var(--bg-surface); color: var(--text-main); padding: 4px 12px; border-radius: var(--radius-pill); }
+
+    .lessons { list-style: none; margin: 0; padding: 0; counter-reset: les; display: grid; gap: 2px; max-width: 68ch; }
+    .lessons li {
+      counter-increment: les;
       display: grid;
-      grid-template-columns: max-content 1fr;
+      grid-template-columns: 34px 1fr;
+      gap: var(--space-3);
+      align-items: baseline;
+      padding: var(--space-2) 0;
+      border-bottom: var(--rule-w-fixed, 1px) solid var(--border-color);
+      line-height: var(--lh-body);
+    }
+    .lessons li::before {
+      content: counter(les);
+      font-family: var(--font-heading);
+      font-weight: var(--heading-weight, 700);
+      color: var(--primary-text);
+      text-align: right;
+    }
+    .details {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
       gap: var(--space-2) var(--space-4);
       margin: 0;
       padding: var(--space-4);
@@ -472,86 +498,83 @@ export class DiscoverView extends LookMixin(LitElement) {
       border-radius: var(--radius-md);
       font-size: var(--fs-small);
     }
-    .meta-list dt { color: var(--text-muted); font-weight: var(--fw-strong); }
-    .meta-list dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-    .meta-list a { color: var(--primary-text); }
+    .details dt { color: var(--text-muted); font-weight: var(--fw-strong); }
+    .details dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+    .details a { color: var(--primary-text); }
 
-    @media (min-width: 760px) {
-      .filters { flex-direction: row; flex-wrap: wrap; column-gap: var(--space-6); row-gap: var(--space-1); }
-      .filter-label { min-width: 0; }
-    }
-    @media (max-width: 600px) {
-      .page-title { font-size: var(--fs-h2); }
-      .tile .cover { height: 92px; }
-      .sheet-panel {
-        left: 0;
-        right: 0;
-        bottom: 0;
-        top: auto;
-        width: 100%;
-        max-height: calc(100% - var(--space-6));
-        transform: none;
-        border-radius: var(--radius-xl) var(--radius-xl) 0 0;
-        border-bottom: 0;
-        box-shadow: var(--shadow-lg);
-        animation-name: sheet-up;
-      }
-      @keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
-      .sheet-body { padding: var(--space-4); }
-      .shots { margin: 0 calc(-1 * var(--space-4)); padding-inline: var(--space-4); scroll-padding-inline: var(--space-4); }
-      .shots img { height: 150px; }
-      .meta-list { grid-template-columns: 1fr; gap: 2px; }
-      .meta-list dd + dt { margin-top: var(--space-2); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .card, .sheet-panel, .scrim { animation: none; }
-      .tile, .chip, .cover-icon { transition: none; }
-    }
-
-    /* ---------- plain: a catalogue page. Display title over a full rule,
-       underline filter tabs, hairline cards, small-caps tags. ---------- */
-    :host([data-look="plain"]) .page-kicker { color: var(--accent-coral); }
-    :host([data-look="plain"]) .page-head {
-      padding-bottom: var(--space-5);
-      margin-bottom: var(--space-5);
-      border-bottom: 1px solid var(--rule-strong, var(--text-main));
-    }
-    :host([data-look="plain"]) .page-title { font-weight: 600; letter-spacing: -0.01em; }
-    :host([data-look="plain"]) .page-subtitle { color: var(--text-soft); }
-    :host([data-look="plain"]) .filters { row-gap: 0; border-bottom: 1px solid var(--rule-soft, var(--border-color)); }
-    :host([data-look="plain"]) .filter-group { gap: var(--space-4); padding: 0; }
-    :host([data-look="plain"]) .filter-label { font-family: var(--font-family); letter-spacing: 0.08em; }
-    :host([data-look="plain"]) .chip {
-      font-family: var(--font-family);
-      font-weight: 500;
-      padding: 8px 0 10px;
-      border: 0;
-      border-bottom: 2px solid transparent;
-      border-radius: 0;
-      background: none;
-      box-shadow: none;
+    .loading { color: var(--text-muted); font-size: var(--fs-small); }
+    .empty-state {
+      text-align: center;
+      padding: var(--space-7) var(--space-5);
+      background: var(--bg-surface);
+      border: var(--rule-w) dashed var(--border-hover);
+      border-radius: var(--radius-lg);
       color: var(--text-muted);
     }
-    :host([data-look="plain"]) .chip:hover { color: var(--text-main); }
-    :host([data-look="plain"]) .chip[aria-pressed="true"] { background: none; color: var(--text-main); border-bottom-color: var(--primary-color); box-shadow: none; }
-    :host([data-look="plain"]) .chip:active { transform: none; }
-    :host([data-look="plain"]) .chip-clear { color: var(--primary-text); text-decoration: underline; }
-    :host([data-look="plain"]) .section-title, :host([data-look="plain"]) .collection-title { font-weight: 600; }
-    :host([data-look="plain"]) .sort-select { box-shadow: none; border-width: 1px; border-radius: 6px; font-family: var(--font-family); font-weight: 500; }
-    :host([data-look="plain"]) .card, :host([data-look="plain"]) .tile {
-      border-width: 1px;
-      border-radius: 10px;
-      box-shadow: var(--raise-rest, none);
-      animation: none;
+
+    /* ---------- wide screens ---------- */
+    @media (min-width: 900px) {
+      :host { --ds-gutter: var(--space-5); --ds-card-w: 248px; --ds-shot-h: 440px; padding-inline: var(--space-5); }
+      .hero { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: var(--space-6); align-items: center; }
+      .feature { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: center; }
+      .feature-text { padding: var(--space-5) var(--space-6); }
+      .page-title { font-size: var(--fs-display, var(--fs-h1)); }
+      .app-head { grid-template-columns: auto minmax(0, 1fr) auto; }
+      .icon { width: 112px; height: 112px; }
+      .head-actions { grid-column: 3; }
+      .split { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: var(--space-7); align-items: start; }
+      .split aside .sec:first-child { margin-top: var(--space-6); }
+      .side-list { display: grid; gap: var(--space-4); }
+      .side-list .card { display: grid; grid-template-columns: 112px minmax(0, 1fr); gap: 4px var(--space-3); align-items: start; }
+      .side-list .art { grid-row: span 3; border-radius: var(--radius-md); box-shadow: none; }
+      .side-list .card-title { margin-top: 0; font-size: 0.95rem; }
+      .facts li { flex: 0 0 auto; padding: 0 var(--space-5); }
+      .facts li:first-child { padding-left: 0; }
+      .actions .add-main, .actions .on-shelf { flex: 0 0 auto; min-width: 240px; }
     }
-    :host([data-look="plain"]) .tile:hover { transform: translateY(-1px); box-shadow: var(--raise-hover, none); }
-    :host([data-look="plain"]) .tile:active { transform: none; }
-    :host([data-look="plain"]) .cover { border-bottom-width: 1px; }
-    :host([data-look="plain"]) .cover-icon { box-shadow: none; border-radius: 8px; }
-    :host([data-look="plain"]) .badge {
+    @media (max-width: 899px) {
+      .head-actions { margin-top: var(--space-1); }
+      .side-list { list-style: none; display: flex; gap: var(--space-4); margin: 0 calc(-1 * var(--ds-gutter)); padding: 4px var(--ds-gutter) 14px; overflow-x: auto; scrollbar-width: none; }
+      .side-list > * { flex: 0 0 var(--ds-card-w); }
+    }
+    @media (max-width: 420px) {
+      .mod-link { grid-template-columns: 88px minmax(0, 1fr); }
+      .mod { padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2); }
+      .facts li { min-width: 76px; padding: 0 var(--space-2); }
+      .title { font-size: var(--fs-h2); }
+      .head-text .title { font-size: 1.35rem; }
+      .icon { width: 72px; height: 72px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .art, .row-link svg { transition: none; }
+    }
+
+    /* ---------- plain: an editorial catalogue. Hairlines, serif titles,
+       small-caps tags, no lips. ---------- */
+    :host([data-look="plain"]) .kicker { color: var(--accent-coral); }
+    :host([data-look="plain"]) .page-head { padding-bottom: var(--space-5); border-bottom: 1px solid var(--rule-strong, var(--text-main)); }
+    :host([data-look="plain"]) .page-title,
+    :host([data-look="plain"]) .title,
+    :host([data-look="plain"]) .row-title,
+    :host([data-look="plain"]) .sec-title,
+    :host([data-look="plain"]) .card-title,
+    :host([data-look="plain"]) .mod-title,
+    :host([data-look="plain"]) .fact-v { font-weight: 600; letter-spacing: -0.005em; }
+    :host([data-look="plain"]) .feature { border-width: 1px; border-radius: 10px; box-shadow: var(--raise-rest, var(--shadow-sm)); }
+    :host([data-look="plain"]) .feature-title { font-weight: 600; }
+    :host([data-look="plain"]) .row { padding-top: var(--space-4); border-top: 1px solid var(--rule-soft, var(--border-color)); margin-bottom: var(--space-6); }
+    :host([data-look="plain"]) .art,
+    :host([data-look="plain"]) .icon { border-width: 1px; border-radius: 8px; box-shadow: var(--raise-rest, none); }
+    :host([data-look="plain"]) .card:hover .art { transform: translateY(-1px); box-shadow: var(--raise-hover, none); }
+    :host([data-look="plain"]) .card:active .art { transform: none; }
+    :host([data-look="plain"]) .hero .art { border-radius: 10px; }
+    :host([data-look="plain"]) .gen-icon { box-shadow: none; border-radius: 8px; }
+    :host([data-look="plain"]) .rail-btn { box-shadow: var(--shadow-sm); border-width: 1px; }
+    :host([data-look="plain"]) .badge,
+    :host([data-look="plain"]) .on-shelf-tag {
       font-family: var(--font-family);
       font-variant-caps: all-small-caps;
-      font-size: 0.82rem;
+      font-size: 0.86rem;
       font-weight: 600;
       letter-spacing: 0.04em;
       padding: 0 6px;
@@ -559,51 +582,50 @@ export class DiscoverView extends LookMixin(LitElement) {
       background: none;
       border: 1px solid currentColor;
     }
-    :host([data-look="plain"]) .on-shelf-badge { border-radius: 6px; }
-    :host([data-look="plain"]) .sheet-panel { border-width: 1px; border-radius: 12px; box-shadow: var(--shadow-lg); animation-timing-function: ease-out; }
-    :host([data-look="plain"]) .sheet-close { box-shadow: none; border-width: 1px; }
-    :host([data-look="plain"]) .sheet-title { font-weight: 600; }
-    :host([data-look="plain"]) .shots img, :host([data-look="plain"]) .detail-clip { border-width: 1px; border-radius: 6px; }
-    :host([data-look="plain"]) .meta-list { background: none; border-top: 1px solid var(--rule-soft, var(--border-color)); border-radius: 0; padding: var(--space-4) 0 0; }
-    :host([data-look="plain"]) .empty-state, :host([data-look="plain"]) .no-match { border-style: solid; border-width: 1px; }
-    :host([data-look="plain"]) .empty-state h3 { font-family: var(--font-heading); font-weight: 600; font-size: var(--fs-h3); color: var(--text-main); }
-    @media (max-width: 600px) {
-      :host([data-look="plain"]) .sheet-panel { border-radius: 12px 12px 0 0; }
-    }
+    :host([data-look="plain"]) .on-shelf-tag { background: var(--bg-surface); }
+    :host([data-look="plain"]) .on-shelf { border-radius: 6px; }
+    :host([data-look="plain"]) .crumb a { font-family: var(--font-family); font-weight: 600; }
+    :host([data-look="plain"]) .by { font-family: var(--font-family); font-weight: 600; }
+    :host([data-look="plain"]) .facts { border-top: 1px solid var(--rule-soft, var(--border-color)); border-bottom: 1px solid var(--rule-soft, var(--border-color)); }
+    :host([data-look="plain"]) .facts li + li { border-left-color: var(--rule-soft, var(--border-color)); }
+    :host([data-look="plain"]) .mod { border-width: 1px; border-radius: 10px; box-shadow: var(--raise-rest, none); }
+    :host([data-look="plain"]) .mod-link .art { border-radius: 6px; }
+    :host([data-look="plain"]) .shot { border-width: 1px; border-radius: 8px; }
+    :host([data-look="plain"]) .play-dot { box-shadow: var(--shadow-md); }
+    :host([data-look="plain"]) .hl-mark { background: none; border: 1px solid var(--rule-soft, var(--border-color)); color: var(--accent-coral); }
+    :host([data-look="plain"]) .lessons li::before { color: var(--accent-coral); font-variant-numeric: oldstyle-nums; }
+    :host([data-look="plain"]) .details { background: none; border-top: 1px solid var(--rule-soft, var(--border-color)); border-radius: 0; padding: var(--space-4) 0 0; }
+    :host([data-look="plain"]) .empty-state { border-style: solid; border-width: 1px; }
   `];
 
   static properties = {
     profileId: { type: String },
+    sub: { type: String },
     _entries: { type: Array, state: true },
     _enrolledIds: { type: Object, state: true },
     _loading: { type: Boolean, state: true },
-    _busyBundleId: { type: String, state: true },
-    _openId: { type: String, state: true },
-    _intros: { type: Object, state: true },
-    _filters: { type: Object, state: true },
-    _sort: { type: String, state: true },
-    _detail: { type: Object, state: true },
+    _busy: { type: String, state: true },
+    _info: { type: Object, state: true },
+    _facts: { type: Object, state: true },
     _fromCache: { type: Boolean, state: true },
+    _playing: { type: Boolean, state: true },
   };
 
   constructor() {
     super();
     this.profileId = '';
+    this.sub = '';
     this._entries = [];
+    this._bundles = [];
     this._enrolledIds = new Set();
     this._loading = true;
-    this._busyBundleId = null;
-    this._openId = null;
-    this._intros = {};
-    this._filters = {};
-    this._sort = 'title';
-    this._detail = null;
+    this._busy = null;
+    this._info = {};
+    this._facts = {};
     this._fromCache = false;
     this._catalog = null;
-    this._opener = null;
-    // Once a parent has held the gate once during this visit, later adds
-    // skip the modal - matches the doc's own "skip on subsequent adds this
-    // visit" spec.
+    this._playing = false;
+    // Once a parent has held the gate once during this visit, later adds skip it.
     this._gateUnlockedThisVisit = false;
   }
 
@@ -611,18 +633,16 @@ export class DiscoverView extends LookMixin(LitElement) {
     await this._load();
   }
 
-  updated() {
-    const dlg = this.renderRoot?.querySelector('dialog.sheet');
-    if (dlg && !dlg.open) {
-      try { dlg.showModal(); } catch { dlg.setAttribute('open', ''); }
-      dlg.querySelector('.sheet-close')?.focus();
+  updated(changed) {
+    if (changed.has('sub')) {
+      this._playing = false;
+      if (changed.get('sub') !== undefined) window.scrollTo({ top: 0 });
     }
   }
 
   async _load() {
     this._loading = true;
     let entries = [];
-    // Catalog first; DEFAULT_SHOWCASE_SOURCES is the fallback.
     try {
       const loaded = await loadCatalog(resolveCatalogUrl());
       if (loaded) {
@@ -647,7 +667,7 @@ export class DiscoverView extends LookMixin(LitElement) {
       }
     }
     this._entries = entries;
-
+    this._bundles = groupByBundle(entries, this._catalog);
     if (this.profileId) {
       try {
         const enrollments = await ProgressStore.listEnrollments(this.profileId);
@@ -655,54 +675,97 @@ export class DiscoverView extends LookMixin(LitElement) {
       } catch { /* best-effort */ }
     }
     this._loading = false;
+    this._loadExtras();
   }
 
-  /** A showcase asset URL (cover, screenshot, intro) is relative to the manifest; only http(s) results are ever used. */
-  _asset(entry, rel) {
-    if (!rel || typeof rel !== 'string') return null;
+  /** Bundle manifests, then module facts one module at a time, in the background. */
+  async _loadExtras() {
+    await Promise.all(this._bundles.map(async (b) => {
+      const info = await loadBundleInfo(b);
+      this._info = { ...this._info, [b.id]: info };
+    }));
+    // The open page's modules first, then the rest.
+    const first = this._pageBundle();
+    const order = [...(first ? first.entries : []), ...this._entries];
+    for (const e of order) {
+      if (this._facts[e.id]) continue;
+      const f = await loadFacts(e);
+      this._facts = { ...this._facts, [e.id]: f };
+    }
+  }
+
+  /* ---------- routing helpers ---------- */
+
+  _route() {
+    const [kind, ...rest] = String(this.sub || '').split('/');
+    const id = decodeURIComponent(rest.join('/'));
+    if (kind === 'bundle' && id) return { kind, id };
+    if (kind === 'module' && id) return { kind, id };
+    return { kind: 'home', id: '' };
+  }
+
+  _pageBundle() {
+    const r = this._route();
+    if (r.kind === 'bundle') return this._bundles.find((b) => b.id === r.id) || null;
+    if (r.kind === 'module') return this._bundleOf(r.id);
+    return null;
+  }
+
+  _bundleOf(entryId) { return this._bundles.find((b) => b.entries.some((e) => e.id === entryId)) || null; }
+
+  _href(kind, id) { return `#/discover/${kind}/${encodeURIComponent(id)}`; }
+
+  /* ---------- adding ---------- */
+
+  async _gate(title) {
+    if (this._gateUnlockedThisVisit) return true;
+    const unlocked = await showParentalGateHold(t('discover.gate_prompt', 'Add "{title}" to this student\'s shelf?', { title }));
+    if (unlocked) this._gateUnlockedThisVisit = true;
+    return unlocked;
+  }
+
+  async _addEntry(entry) {
+    // addSource relocates when the bundle is already added from another URL.
+    const existing = (await CourseSourceManager.listSources()).find((r) => r.bundleId === entry.bundleId);
+    if (!existing || existing.sourceUrl !== entry.manifestUrl) await CourseSourceManager.addSource(entry.manifestUrl);
+    countInstall(entry.bundleId);
+    // Discover enrols only the active profile (a sibling's pick does not clutter another shelf).
+    await ProgressStore.enroll(this.profileId, entry.bundleId, { source: 'discover' });
+    this._enrolledIds = new Set([...this._enrolledIds, entry.bundleId]);
+  }
+
+  /** Adds the given entries (only the missing ones) behind one gate. */
+  async _add(entries, busyKey, title) {
+    if (!this.profileId || this._busy) return;
+    const todo = entries.filter((e) => this._canAdd(e) && !this._enrolledIds.has(e.bundleId));
+    if (!todo.length) return;
+    if (!(await this._gate(title))) return;
+    this._busy = busyKey;
     try {
-      const u = new URL(rel, entry.manifestUrl);
-      return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null;
-    } catch { return null; }
+      for (const e of todo) {
+        try { await this._addEntry(e); } catch (err) { console.error('[DiscoverView] could not add course:', err); }
+      }
+    } finally {
+      this._busy = null;
+    }
   }
 
-  /** Opens/closes the detail state for one entry (meta, showcase, shots, clip, intro). */
-  async _toggleDetails(entry, opener) {
-    if (this._openId === entry.bundleId) { this._closeDetails(); return; }
-    this._opener = opener || this.renderRoot?.activeElement || null;
-    this._openId = entry.bundleId;
-    this._detail = null;
-    const detail = await loadDetail(entry);
-    if (this._openId === entry.bundleId) this._detail = detail;
+  _canAdd(e) { return e.manifest?.status !== 'draft' && !needsNewerEngine(e.manifest || {}); }
+
+  async _share({ manifestUrl, title }) {
+    const { shareCourse } = await import('../components/ShareSheet.js');
+    shareCourse({ manifestUrl, title });
   }
 
-  _closeDetails() {
-    this._openId = null;
-    this._detail = null;
-    const back = this._opener;
-    this._opener = null;
-    if (back && back.isConnected) this.updateComplete.then(() => back.focus?.());
-  }
+  /* ---------- small view helpers ---------- */
 
-  _setFilter(key, value) {
-    const next = { ...this._filters };
-    if (next[key] === value || value === '') delete next[key]; else next[key] = value;
-    this._filters = next;
-  }
+  _title(e) { return e.manifest?.title?.en || e.manifest?.title || e.bundleId || e.id; }
+  _subject(e) { return e.meta?.subjects?.[0] || e.manifest?.subject || ''; }
+  _show(e) { return (this._shows ||= new Map()).get(e) || this._shows.set(e, entryShowcase(e)).get(e); }
+  _lessonCount(e) { return this._facts[e.id]?.lessonCount ?? (Array.isArray(e.manifest?.lessons) ? e.manifest.lessons.length : 0); }
+  _bundleTitle(b) { return b?.title || this._info[b?.id]?.title || ''; }
 
-  /** Entries after filters and sort. */
-  get _visible() { return sortEntries(filterEntries(this._entries, this._filters), this._sort); }
-
-  getSubjectIcon(subject) {
-    const sub = (subject || '').toLowerCase();
-    if (sub.includes('bio')) return '🌿';
-    if (sub.includes('phys')) return '⚛️';
-    if (sub.includes('chem')) return '🧪';
-    if (sub.includes('math')) return '📐';
-    return '📖';
-  }
-
-  getSubjectClass(subject) {
+  _subjectClass(subject) {
     const sub = (subject || '').toLowerCase();
     if (sub.includes('bio')) return 'biology';
     if (sub.includes('phys')) return 'physics';
@@ -711,304 +774,356 @@ export class DiscoverView extends LookMixin(LitElement) {
     return '';
   }
 
-  async _handleAdd(entry) {
-    if (!this.profileId || this._busyBundleId) return;
-    if (!this._gateUnlockedThisVisit) {
-      const unlocked = await showParentalGateHold(
-        t('discover.gate_prompt', 'Add "{title}" to this student\'s shelf?', { title: this._title(entry) }),
-      );
-      if (!unlocked) return;
-      this._gateUnlockedThisVisit = true;
-    }
-    this._busyBundleId = entry.bundleId;
-    try {
-      // addSource relocates when the bundle is already added from another URL.
-      const existing = (await CourseSourceManager.listSources()).find((r) => r.bundleId === entry.bundleId);
-      if (!existing || existing.sourceUrl !== entry.manifestUrl) {
-        await CourseSourceManager.addSource(entry.manifestUrl);
-      }
-      countInstall(entry.bundleId);
-      // Discover intentionally enrolls only the active profile - a parent
-      // adding via Parent Dashboard -> Course Sources still enrolls every
-      // profile (see CourseSourcesPanel.js), a deliberate difference (a
-      // sibling's Discover pick shouldn't clutter another child's shelf).
-      await ProgressStore.enroll(this.profileId, entry.bundleId, { source: 'discover' });
-      this._enrolledIds = new Set([...this._enrolledIds, entry.bundleId]);
-    } catch (e) {
-      console.error('[DiscoverView] could not add course:', e);
-    } finally {
-      this._busyBundleId = null;
-    }
+  _subjectIcon(subject) {
+    const sub = (subject || '').toLowerCase();
+    if (sub.includes('bio')) return '\u{1F33F}';
+    if (sub.includes('phys')) return '⚛️';
+    if (sub.includes('chem')) return '\u{1F9EA}';
+    if (sub.includes('math')) return '\u{1F4D0}';
+    return '\u{1F4D6}';
   }
 
-  /* ---------- small view helpers ---------- */
-
-  _title(entry) { return entry.manifest?.title?.en || entry.manifest?.title || entry.bundleId || entry.id; }
-
-  _subject(entry) { return entry.meta?.subjects?.[0] || entry.manifest?.subject || ''; }
-
-  _tagline(entry) {
-    const s = entry.manifest?.showcase;
-    const tag = s && typeof s === 'object' ? (s.tagline?.en || s.tagline) : '';
-    return typeof tag === 'string' ? tag : '';
+  /** Cover art: the course's own cover, else generated (subject banner under Quill, look cover under plain). */
+  _art(e, { cls = 'art', url = null, tag = true } = {}) {
+    const cover = url || this._show(e).cover;
+    const subject = this._subject(e);
+    return html`<span class=${cls}>
+      <span class="gen ${this._subjectClass(subject)}">
+        ${this.look === 'plain' ? html`<look-cover seed=${e.bundleId} subject=${subjectName(subject)} heading=${this._title(e)}></look-cover>` : ''}
+        <span class="gen-icon" aria-hidden="true">${e.manifest?.icon || this._subjectIcon(subject)}</span>
+      </span>
+      ${cover ? html`<img src=${cover} alt="" loading="lazy" @error=${(ev) => ev.target.remove()}>` : ''}
+      ${tag && this._enrolledIds.has(e.bundleId) ? html`<span class="on-shelf-tag">${iconCheck}${t('discover.on_shelf_short', 'On shelf')}</span>` : ''}
+    </span>`;
   }
 
-  _kicker(entry) {
-    const m = entry.meta || {};
-    const subj = (m.subjects?.length ? m.subjects : [entry.manifest?.subject]).filter(Boolean).map(cap).join(', ');
-    return [subj, gradeLabel(m.grade ?? entry.manifest?.grade)].filter(Boolean).join(' \u00b7 ');
+  _meta(e, { size = false } = {}) {
+    const n = this._lessonCount(e);
+    const f = this._facts[e.id];
+    const s = this._show(e);
+    return html`<span class="meta">
+      ${n ? html`<span>${plural(n, t('discover.lesson', 'lesson'), t('discover.lessons', 'lessons'))}</span>` : ''}
+      ${s.estHours != null ? html`<span>${t('discover.hours_short', 'about {n} h', { n: s.estHours })}</span>` : ''}
+      ${size && s.sizeMB != null ? html`<span>${s.sizeMB} MB</span>` : ''}
+      ${f?.narrated ? html`<span class="narr">${SPEAKER}${t('discover.feature.narration', 'Narrated')}</span>` : ''}
+    </span>`;
   }
 
-  /** Badges in a fixed order: curator label, needs-update / draft status, narrated. */
-  _badges(entry) {
-    const out = [];
-    const lb = LABEL_BADGES[entry.label];
-    if (lb) out.push({ kind: entry.label, text: t(lb[0], lb[1]), hint: t(lb[2], lb[3]) });
-    const m = entry.manifest || {};
-    if (needsNewerEngine(m)) out.push({ kind: 'update', text: t('course.needs_update_badge', 'Needs update'), hint: t('discover.badge.update_hint', 'Needs a newer version of CoAuthor') });
-    else if (m.status === 'draft') out.push({ kind: 'draft', text: t('discover.badge.draft', 'Draft') });
-    else if (m.status === 'partial') out.push({ kind: 'draft', text: t('discover.badge.partial', 'Partly ready') });
-    if (entry.meta?.features?.narration) out.push({ kind: 'narrated', text: t('discover.feature.narration', 'Narrated') });
-    return out;
+  _card(e) {
+    const s = this._show(e);
+    return html`<a class="card" href=${this._href('module', e.id)}>
+      ${this._art(e)}
+      <span class="card-title">${this._title(e)}</span>
+      ${s.blurb ? html`<span class="card-line">${s.blurb}</span>` : ''}
+      ${this._meta(e)}
+    </a>`;
   }
 
-  _badgeIcon(kind) {
-    if (kind === 'checked' || kind === 'core') return html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-    if (kind === 'narrated') return html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 6h3l4-3v10l-4-3H2z" fill="currentColor"/><path d="M11.5 5.5a3.5 3.5 0 0 1 0 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
-    if (kind === 'update') return html`<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v8M4.5 6.5L8 10l3.5-3.5M3 13.5h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-    return '';
-  }
-
-  _renderBadges(entry) {
-    const b = this._badges(entry);
-    return b.length ? html`<ul class="badges">${b.map((x) => html`<li class="badge ${x.kind}" title=${x.hint || ''}>${this.look === 'plain' ? '' : this._badgeIcon(x.kind)}${x.text}</li>`)}</ul>` : '';
-  }
-
-  /** The cover: the showcase image when there is one, else a look cover (plain) or a subject banner (Quill). */
-  _renderCover(entry, coverUrl) {
-    const subject = this._subject(entry);
-    const cover = coverUrl || this._asset(entry, (typeof entry.manifest?.showcase === 'object' && entry.manifest.showcase?.cover) || entry.manifest?.cover);
-    // The generated cover always sits underneath, so an image that fails to load falls back to it.
-    return html`<div class="cover ${this.getSubjectClass(subject)}">
-      ${this.look === 'plain' ? html`<look-cover seed=${entry.bundleId} subject=${cap(subject)} heading=${this._title(entry)}></look-cover>` : ''}
-      <span class="cover-icon" aria-hidden="true">${entry.manifest?.icon || this.getSubjectIcon(subject)}</span>
-      ${cover ? html`<img src=${cover} alt="" loading="lazy" @error=${(e) => e.target.remove()}>` : ''}
-    </div>`;
-  }
-
-  /** The add action, shared by the card and the sheet. */
-  _renderAction(entry, size = 'btn-sm') {
-    const m = entry.manifest || {};
-    if (this._enrolledIds.has(entry.bundleId)) {
-      return html`<span class="on-shelf-badge">\u2713 ${t('discover.on_shelf', 'On your shelf')}</span>`;
-    }
-    if (m.status === 'draft') {
-      return html`<button class="btn-3d btn-primary ${size}" disabled>${t('discover.add', 'Add to my shelf')}</button><span class="not-reviewed">${t('discover.not_reviewed', 'Not reviewed yet')}</span>`;
-    }
-    const busy = this._busyBundleId === entry.bundleId;
-    return html`<button class="btn-3d btn-primary ${size}" ?disabled=${busy} @click=${() => this._handleAdd(entry)}>
-      ${busy ? t('discover.adding', 'Adding\u2026') : t('discover.add', 'Add to my shelf')}
+  /** Add button for one module. size: 'sm' pill (lists) or 'lg' (module page). */
+  _addOne(e, size = 'sm') {
+    if (this._enrolledIds.has(e.bundleId)) return html`<span class="on-shelf">${iconCheck}${size === 'lg' ? t('discover.on_shelf', 'On your shelf') : t('discover.on_shelf_short', 'On shelf')}</span>`;
+    if (!this._canAdd(e)) return html`<span class="badge update">${t('course.needs_update_badge', 'Needs update')}</span>`;
+    const busy = this._busy === `m:${e.id}`;
+    return html`<button class="btn-3d btn-primary ${size === 'lg' ? 'btn-lg add-main' : 'btn-sm pill-add'}" ?disabled=${!!this._busy}
+        @click=${() => this._add([e], `m:${e.id}`, this._title(e))}>
+      ${busy ? t('discover.adding', 'Adding…') : size === 'lg' ? t('discover.add', 'Add to my shelf') : t('discover.add_short', 'Add')}
     </button>`;
   }
 
-  _renderCollections() {
-    if (!this._catalog && !this._entries.some((e) => e.featured || e.addedAt || e.installs)) return '';
-    // Catalog collections show with 1+ items. Derived ones (featured, new,
-    // popular) only once there are 6+ courses, popular only with install
-    // counts, and a row repeating an earlier row's set of courses is dropped.
-    const own = new Set((this._catalog?.collections || []).map((c) => c.id));
-    const enough = this._entries.length >= 6;
-    const hasInstalls = this._entries.some((e) => e.installs > 0);
-    const seen = new Set();
-    const cols = buildCollections(this._entries, this._catalog).filter((c) => {
-      if (!own.has(c.id) && (!enough || (c.id === 'popular' && !hasInstalls))) return false;
-      const key = c.entries.map((e) => e.id).sort().join('\n');
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-    const titles = { featured: t('discover.col.featured', 'Featured'), new: t('discover.col.new', 'New'), popular: t('discover.col.popular', 'Most popular') };
-    return cols.length ? html`<div class="collections">${cols.map((c) => html`
-      <section class="collection" data-collection=${c.id} aria-label=${titles[c.id] || c.title}>
-        <h3 class="collection-title">${titles[c.id] || c.title}</h3>
-        <ul class="collection-list">${c.entries.map((e) => {
-          const line = this._tagline(e) || this._kicker(e);
-          return html`<li>
-            <button class="collection-item tile" @click=${(ev) => this._toggleDetails(e, ev.currentTarget)}>
-              ${this._renderCover(e)}
-              <span class="tile-body">
-                <span class="tile-title">${this._title(e)}</span>
-                ${line ? html`<span class="tile-line">${line}</span>` : ''}
-                ${this._renderBadges(e)}
-              </span>
-            </button>
-          </li>`;
-        })}</ul>
-      </section>`)}</div>` : '';
+  /** Add-all for a bundle: adds only the missing modules. */
+  _addAll(b, size = 'sm') {
+    const addable = b.entries.filter((e) => this._canAdd(e));
+    const missing = addable.filter((e) => !this._enrolledIds.has(e.bundleId));
+    if (!missing.length) return html`<span class="on-shelf">${iconCheck}${t('discover.all_on_shelf', 'All on your shelf')}</span>`;
+    const busy = this._busy === `b:${b.id}`;
+    const label = addable.length === 1
+      ? (size === 'lg' ? t('discover.add', 'Add to my shelf') : t('discover.add_short', 'Add'))
+      : missing.length === addable.length
+      ? t('discover.add_all', 'Add all {n}', { n: missing.length })
+      : t('discover.add_rest', 'Add the other {n}', { n: missing.length });
+    return html`<button class="btn-3d ${size === 'lg' ? 'btn-primary btn-lg add-main' : 'btn-secondary btn-sm pill-add'}" ?disabled=${!!this._busy}
+        @click=${() => this._add(missing, `b:${b.id}`, this._bundleTitle(b))}>
+      ${busy ? t('discover.adding', 'Adding…') : label}
+    </button>`;
   }
 
-  _facetLabel(key, v) {
-    if (key === 'audience') { const a = AUDIENCE_LABELS[v]; return a ? t(a[0], a[1]) : cap(v); }
-    if (key === 'grade') return gradeLabel(v);
-    if (key === 'language') return languageName(v);
-    if (key === 'feature') { const f = FEATURE_LABELS[v]; return f ? t(f[0], f[1]) : cap(v); }
-    return cap(v);
+  _scrollRail(ev, dir) {
+    const rail = ev.currentTarget.parentElement.querySelector('.rail');
+    rail?.scrollBy({ left: dir * rail.clientWidth * 0.9, behavior: 'smooth' });
   }
 
-  _renderFilters() {
-    const f = buildFacets(this._entries);
-    const groups = [
-      ['audience', t('discover.filter.audience', 'For')],
-      ['subject', t('discover.filter.subject', 'Subject')],
-      ['grade', t('discover.filter.grade', 'Grade')],
-      ['feature', t('discover.filter.feature', 'Has')],
-      ['language', t('discover.filter.language', 'Language')],
-    ];
-    const shown = groups.filter(([key]) => f[key].length > 1 || (f[key].length === 1 && this._filters[key]));
-    const active = Object.keys(this._filters).length > 0;
-    if (!shown.length && !active) return '';
-    return html`<div class="filters" role="group" aria-label=${t('discover.filter.label', 'Filter courses')}>
-      ${shown.map(([key, label]) => html`
-        <div class="filter-group" data-filter=${key}><span class="filter-label">${label}</span>
-          ${f[key].map((v) => html`<button class="chip" data-value=${v} aria-pressed=${this._filters[key] === v ? 'true' : 'false'} @click=${() => this._setFilter(key, v)}>${this._facetLabel(key, v)}</button>`)}
-        </div>`)}
-      ${active ? html`<div class="filter-group"><span class="filter-label"></span><button class="chip chip-clear" @click=${() => { this._filters = {}; }}>${t('discover.filter.clear', 'Clear filters')}</button></div>` : ''}
+  _rail(entries) {
+    return html`<div class="rail-wrap">
+      ${entries.length > 4 ? html`<button class="rail-btn prev" aria-label=${t('discover.prev', 'Scroll back')} @click=${(ev) => this._scrollRail(ev, -1)}>${iconChevronRight}</button>` : ''}
+      <ul class="rail">${entries.map((e) => html`<li>${this._card(e)}</li>`)}</ul>
+      ${entries.length > 4 ? html`<button class="rail-btn next" aria-label=${t('discover.next', 'Scroll on')} @click=${(ev) => this._scrollRail(ev, 1)}>${iconChevronRight}</button>` : ''}
     </div>`;
   }
 
-  _renderSort() {
-    return html`<label class="filter-sort">${t('discover.sort', 'Sort')}
-      <select class="sort-select" .value=${this._sort} @change=${(e) => { this._sort = e.target.value; }}>
-        <option value="title" ?selected=${this._sort === 'title'}>${t('discover.sort.title', 'A to Z')}</option>
-        <option value="new" ?selected=${this._sort === 'new'}>${t('discover.sort.new', 'Newest')}</option>
-        <option value="popular" ?selected=${this._sort === 'popular'}>${t('discover.sort.popular', 'Most popular')}</option>
-      </select></label>`;
+  _facts_(items) {
+    const shown = items.filter(([v]) => v != null && v !== '');
+    return shown.length ? html`<ul class="facts">${shown.map(([v, k]) => html`<li><span class="fact-v">${v}</span><span class="fact-k">${k}</span></li>`)}</ul>` : '';
   }
 
-  /** The body of the detail sheet: description, screenshots, clip, intro and the metadata list. */
-  _renderDetail(entry) {
-    const d = this._detail;
-    if (!d) return html`<div class="details" data-state="loading"><app-loader size="40" label=${t('discover.loading', 'Loading\u2026')}></app-loader></div>`;
-    const m = d.meta || {};
-    const meta = [];
-    if (m.audience) meta.push([t('discover.meta.audience', 'For'), this._facetLabel('audience', m.audience)]);
-    if (m.subjects?.length) meta.push([t('discover.meta.subjects', 'Subjects'), m.subjects.map(cap).join(', ')]);
-    if (m.grade != null) meta.push([t('discover.meta.grade', 'Grade'), gradeLabel(m.grade, '').trim() || String(m.grade)]);
-    if (m.languages?.length) meta.push([t('discover.meta.languages', 'Languages'), m.languages.map(languageName).join(', ')]);
-    const feats = Object.keys(m.features || {}).filter((k) => m.features[k]).map((k) => this._facetLabel('feature', k));
-    if (feats.length) meta.push([t('discover.meta.features', 'Includes'), feats.join(', ')]);
-    if (m.estHours != null) meta.push([t('discover.meta.hours', 'Time'), t('discover.meta.hours_value', 'About {n} hours', { n: m.estHours })]);
-    if (m.authors?.length) meta.push([t('discover.meta.authors', 'By'), m.authors.map((a) => a.name).join(', ')]);
-    meta.push([t('discover.meta.license', 'Licence'), m.license || t('discover.meta.not_stated', 'Not stated')]);
-    const repo = m.repository?.url && /^https?:/i.test(m.repository.url) ? m.repository.url : '';
-    let sourceText = repo || entry.manifestUrl;
-    try { const u = new URL(sourceText); sourceText = u.host + u.pathname.replace(/\/(manifest\.json)?$/, ''); } catch { /* keep raw */ }
-    meta.push([t('discover.meta.source', 'Source'), repo ? html`<a href=${repo} target="_blank" rel="noopener noreferrer">${sourceText}</a>` : sourceText]);
-    return html`<div class="details" data-state="open">
-      ${d.description ? html`<p class="detail-description">${d.description}</p>` : ''}
-      ${d.shots.length ? html`<section><h3>${t('discover.screenshots', 'Inside the course')}</h3><div class="shots">${d.shots.map((sh) => html`<figure><img src=${sh.url} alt=${sh.caption || ''} loading="lazy">${sh.caption ? html`<figcaption>${sh.caption}</figcaption>` : ''}</figure>`)}</div></section>` : ''}
-      ${d.clip ? html`<section><h3>${t('discover.clip', 'Watch')}</h3><video class="detail-clip" src=${d.clip} muted loop playsinline controls preload="none"></video></section>` : ''}
-      ${d.intro ? html`<section><h3>${t('discover.about', 'About this course')}</h3><markdown-renderer .content=${d.intro}></markdown-renderer></section>` : ''}
-      <section><h3>${t('discover.details', 'Details')}</h3>
-        <dl class="meta-list">${meta.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
-      </section>
-    </div>`;
+  _alignLine(a) {
+    return a ? html`<p class="align">${BOOKMARK}<span>${a.text}</span></p>` : '';
   }
 
-  _renderSheet() {
-    const entry = this._openId && this._entries.find((e) => e.bundleId === this._openId);
-    if (!entry) return '';
-    const d = this._detail;
-    const tagline = d?.tagline || this._tagline(entry);
-    const kicker = this._kicker(entry);
-    const close = () => this._closeDetails();
-    return html`<dialog class="sheet" aria-labelledby="sheet-title"
-        @cancel=${(e) => { e.preventDefault(); close(); }}>
-      <div class="scrim" @click=${close}></div>
-      <article class="sheet-panel">
-        <button class="sheet-close" aria-label=${t('discover.close', 'Close')} @click=${close}>
-          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg>
-        </button>
-        <div class="sheet-hero">${this._renderCover(entry, d?.cover)}</div>
-        <div class="sheet-body">
-          <header class="sheet-head">
-            ${kicker ? html`<div class="card-type">${kicker}</div>` : ''}
-            <h2 class="sheet-title" id="sheet-title">${this._title(entry)}</h2>
-            ${tagline ? html`<p class="sheet-tagline">${tagline}</p>` : ''}
-            ${this._renderBadges(entry)}
-          </header>
-          <div class="sheet-action">
-            ${this._renderAction(entry, 'btn-lg')}
-            ${this._enrolledIds.has(entry.bundleId) || entry.manifest?.status === 'draft' ? '' : html`<span class="hint">${t('discover.needs_parent', 'A parent holds the button to confirm.')}</span>`}
+  _badges(list) {
+    return list.length ? html`<ul class="badges">${list.map((x) => html`<li class="badge ${x.kind}" title=${x.hint || ''}>${this.look === 'plain' ? '' : x.icon || ''}${x.text}</li>`)}</ul>` : '';
+  }
+
+  _labelBadge(e) {
+    const lb = LABEL_BADGES[e.label];
+    return lb ? [{ kind: e.label, text: t(lb[0], lb[1]), hint: t(lb[2], lb[3]), icon: iconCheck }] : [];
+  }
+
+  /* ---------- pages ---------- */
+
+  _renderHome() {
+    return html`
+      <header class="page-head">
+        <p class="kicker">${t('discover.kicker', 'Course shop')}</p>
+        <h1 class="page-title">${t('discover.title', 'Discover')}</h1>
+        <p class="page-subtitle">${t('discover.subtitle_bundles', 'Add a whole subject at once, or pick single modules. Adding needs a parent.')}</p>
+        ${this._fromCache ? html`<p class="catalog-offline">${t('discover.offline', 'Showing the last saved list (offline).')}</p>` : ''}
+      </header>
+      ${this._renderFeature()}
+      ${this._bundles.map((b) => {
+        const info = this._info[b.id] || {};
+        const single = b.id.startsWith('single:');
+        const title = single ? this._title(b.entries[0]) : (this._bundleTitle(b) || b.id);
+        return html`<section class="row" aria-label=${title}>
+          <div class="row-head">
+            ${single ? html`<h2 class="row-title">${title}</h2>` : html`<a class="row-link" href=${this._href('bundle', b.id)}>
+              <h2 class="row-title">${title}</h2>${iconChevronRight}</a>`}
+            ${this.profileId ? this._addAll(b) : ''}
           </div>
-          ${this._renderDetail(entry)}
+          ${info.blurb ? html`<p class="row-blurb">${info.blurb}</p>` : html`<p class="row-blurb">${plural(b.entries.length, t('discover.module', 'module'), t('discover.modules', 'modules'))}</p>`}
+          ${this._rail(b.entries)}
+        </section>`;
+      })}
+    `;
+  }
+
+  _bundleAlignment(b) {
+    const fs = b.entries.map((e) => this._facts[e.id]);
+    if (fs.some((f) => !f)) return null;
+    const m = b.entries[0]?.meta || {};
+    return syllabusAlignment(fs.flatMap((f) => f.chapterIds || []), { board: m.board, grade: m.grade, subject: m.subjects?.[0] });
+  }
+
+  _renderBundle(b) {
+    const info = this._info[b.id] || {};
+    const title = this._bundleTitle(b) || b.id;
+    const first = b.entries[0];
+    const m = first?.meta || {};
+    const lessons = b.entries.reduce((n, e) => n + this._lessonCount(e), 0);
+    const hours = b.entries.every((e) => this._show(e).estHours != null) ? b.entries.reduce((n, e) => n + this._show(e).estHours, 0) : null;
+    const size = b.entries.every((e) => this._show(e).sizeMB != null) ? b.entries.reduce((n, e) => n + this._show(e).sizeMB, 0) : null;
+    const narrated = b.entries.some((e) => this._facts[e.id]?.narrated);
+    const align = this._bundleAlignment(b);
+    // No board name here: "CBSE" appears only in the derived syllabus line (D29).
+    const by = [m.authors?.[0]?.name || 'CoAuthor', first ? subjectName(this._subject(first)) : '', m.grade != null ? gradeLabel(m.grade, 'Class') : ''].filter(Boolean).join(' · ');
+    const coverUrl = this._bundleCover(b);
+    return html`
+      <nav class="crumb"><a href="#/discover">${iconArrowLeft}${t('discover.title', 'Discover')}</a></nav>
+      <header class="hero">
+        ${first ? this._art(first, { url: coverUrl, tag: false }) : ''}
+        <div class="hero-text">
+          <p class="kicker">${t('discover.bundle_kicker', 'Course bundle')}</p>
+          <h1 class="title">${title}</h1>
+          <p class="by">${by}</p>
+          ${info.blurb ? html`<p class="lead">${info.blurb}</p>` : ''}
+          ${this._facts_([
+            [b.entries.length, t('discover.modules', 'modules')],
+            [lessons || null, t('discover.lessons', 'lessons')],
+            [hours != null ? `${Math.round(hours)} h` : null, t('discover.of_learning', 'to learn')],
+            [size != null ? `${Math.round(size)} MB` : null, t('discover.download', 'download')],
+          ])}
+          ${this._badges([...this._labelBadge(first || {}), ...(narrated ? [{ kind: 'narrated', text: t('discover.some_narrated', 'Some lessons narrated'), icon: SPEAKER }] : [])])}
+          <div class="actions">
+            ${this.profileId ? this._addAll(b, 'lg') : ''}
+            ${bundleManifestUrl(b) ? html`<button class="btn-3d btn-secondary btn-sm share-btn" @click=${() => this._share({ manifestUrl: first.manifestUrl, title })}>${iconShare}<span>${t('discover.share', 'Share')}</span></button>` : ''}
+          </div>
+          ${this.profileId && b.entries.some((e) => !this._enrolledIds.has(e.bundleId)) ? html`<p class="gate-hint">${t('discover.needs_parent', 'A parent holds the button to confirm.')}</p>` : ''}
+          ${this._alignLine(align)}
         </div>
-      </article>
-    </dialog>`;
+      </header>
+      ${info.description || info.highlights?.length ? html`<section class="sec">
+        <h2 class="sec-title">${t('discover.about_bundle', 'About this bundle')}</h2>
+        ${info.description ? html`<p class="prose">${info.description}</p>` : ''}
+        ${this._highlights(info.highlights)}
+      </section>` : ''}
+      <section class="sec">
+        <h2 class="sec-title">${t('discover.modules_title', 'Modules')}<span class="count">${b.entries.length}</span></h2>
+        <ul class="mods">${b.entries.map((e) => html`<li class="mod">
+          <a class="mod-link" href=${this._href('module', e.id)}>
+            ${this._art(e)}
+            <span class="mod-text">
+              <span class="mod-title">${this._title(e)}</span>
+              ${this._show(e).blurb ? html`<span class="mod-line">${this._show(e).blurb}</span>` : ''}
+              ${this._meta(e, { size: true })}
+            </span>
+          </a>
+          ${this.profileId ? this._addOne(e) : ''}
+        </li>`)}</ul>
+      </section>
+      ${align ? html`<p class="indep">${t('discover.independent', INDEPENDENCE_NOTE)}</p>` : ''}
+    `;
+  }
+
+  /** A bundle's cover: its own, else (Quill only) the cover.jpg make-landing draws in the Quill look. */
+  _bundleCover(b) {
+    const info = this._info[b.id] || {};
+    return info.cover || (this.look === 'plain' ? null : info.coverFallback) || null;
+  }
+
+  /** The featured bundle on top of home: the first one for this learner (college under plain, else school). */
+  _renderFeature() {
+    const real = this._bundles.filter((b) => !b.id.startsWith('single:'));
+    if (!real.length) return '';
+    const adult = (b) => b.audience === 'college' || b.audience === 'adult';
+    const b = (this.look === 'plain' ? real.find(adult) : real.find((x) => !adult(x))) || real[0];
+    const info = this._info[b.id] || {};
+    const lessons = b.entries.reduce((n, e) => n + this._lessonCount(e), 0);
+    return html`<section class="feature" aria-label=${t('discover.featured', 'Featured')}>
+      <a class="feature-art" href=${this._href('bundle', b.id)} tabindex="-1" aria-hidden="true">${this._art(b.entries[0], { url: this._bundleCover(b), tag: false })}</a>
+      <div class="feature-text">
+        <p class="kicker">${t('discover.featured_bundle', 'Featured bundle')}</p>
+        <h2 class="feature-title"><a href=${this._href('bundle', b.id)}>${this._bundleTitle(b) || b.id}</a></h2>
+        ${info.blurb ? html`<p class="feature-blurb">${info.blurb}</p>` : ''}
+        <p class="meta">
+          <span>${plural(b.entries.length, t('discover.module', 'module'), t('discover.modules', 'modules'))}</span>
+          ${lessons ? html`<span>${plural(lessons, t('discover.lesson', 'lesson'), t('discover.lessons', 'lessons'))}</span>` : ''}
+          ${b.entries.some((e) => this._facts[e.id]?.narrated) ? html`<span class="narr">${SPEAKER}${t('discover.feature.narration', 'Narrated')}</span>` : ''}
+        </p>
+        <div class="actions">
+          <a class="btn-3d btn-secondary btn-sm" href=${this._href('bundle', b.id)}>${t('discover.see_bundle', 'See the bundle')}</a>
+          ${this.profileId ? this._addAll(b) : ''}
+        </div>
+      </div>
+    </section>`;
+  }
+
+  _highlights(list) {
+    return list?.length ? html`<ul class="highlights">${list.map((h) => html`<li><span class="hl-mark">${iconCheck}</span><span>${h}</span></li>`)}</ul>` : '';
+  }
+
+  _renderMedia(e) {
+    const s = this._show(e);
+    if (!s.screencast && !s.screenshots.length) return '';
+    return html`<section class="sec" aria-label=${t('discover.screenshots', 'Screenshots')}>
+      <ul class="shots">
+        ${s.screencast?.url ? html`<li><figure class="shot">
+          <video src=${s.screencast.url} poster=${s.screencast.poster || s.screenshots[0]?.url || ''} muted playsinline loop preload="none"
+            ?controls=${this._playing} aria-label=${t('discover.clip', 'A short silent clip from the module')}></video>
+          ${this._playing ? '' : html`<button class="play" @click=${(ev) => { const v = ev.currentTarget.parentElement.querySelector('video'); this._playing = true; v?.play?.().catch(() => {}); }}>
+            <span class="play-dot">${PLAY}</span><span class="play-label">${t('discover.watch', 'Watch a clip')}</span>
+          </button>`}
+        </figure></li>` : ''}
+        ${s.screenshots.map((sh, i) => html`<li><figure class="shot">
+          <img src=${sh.url} alt=${sh.caption || t('discover.shot_alt', 'Screenshot {n}', { n: i + 1 })} loading="lazy"
+            @load=${(ev) => { const im = ev.currentTarget; if (im.naturalWidth > im.naturalHeight) im.parentElement.classList.add('land'); }}>
+          ${sh.caption ? html`<figcaption>${sh.caption}</figcaption>` : ''}
+        </figure></li>`)}
+      </ul>
+    </section>`;
+  }
+
+  _renderModule(e) {
+    const b = this._bundleOf(e.id);
+    const s = this._show(e);
+    const f = this._facts[e.id];
+    const m = e.meta || {};
+    const bTitle = b && !b.id.startsWith('single:') ? this._bundleTitle(b) : '';
+    const grade = m.grade ?? e.manifest?.grade;
+    const sub = [subjectName(this._subject(e)), grade != null ? gradeLabel(grade, 'Class') : ''].filter(Boolean).join(' · ');
+    const badges = [...this._labelBadge(e), ...(f?.narrated ? [{ kind: 'narrated', text: t('discover.feature.narration', 'Narrated'), icon: SPEAKER }] : [])];
+    const lessons = (f?.modules || []).flatMap((mod) => mod.lessons).map((l) => l.title).filter(Boolean);
+    const others = b ? b.entries.filter((x) => x.id !== e.id) : [];
+    const details = [];
+    if (m.authors?.length) details.push([t('discover.meta.authors', 'Made by'), m.authors.map((a) => a.name).join(', ')]);
+    details.push([t('discover.meta.license', 'Licence'), m.license || t('discover.meta.not_stated', 'Not stated')]);
+    if (m.version) details.push([t('discover.meta.version', 'Version'), m.version]);
+    if (m.updatedAt) details.push([t('discover.meta.updated', 'Updated'), m.updatedAt]);
+    if (m.languages?.length) details.push([t('discover.meta.languages', 'Language'), m.languages.map((l) => (l === 'en' ? 'English' : l)).join(', ')]);
+    const repo = m.repository?.url && /^https?:/i.test(m.repository.url) ? m.repository.url : '';
+    if (repo) details.push([t('discover.meta.source', 'Source'), html`<a href=${repo} target="_blank" rel="noopener noreferrer">${repo.replace(/^https?:\/\//, '')}</a>`]);
+    return html`
+      <nav class="crumb"><a href=${b && bTitle ? this._href('bundle', b.id) : '#/discover'}>${iconArrowLeft}${bTitle || t('discover.title', 'Discover')}</a></nav>
+      <header class="app-head">
+        ${this._art(e, { cls: 'icon', tag: false })}
+        <div class="head-text">
+          <h1 class="title">${this._title(e)}</h1>
+          ${bTitle ? html`<a class="by" href=${this._href('bundle', b.id)}>${bTitle}</a>` : ''}
+          <p class="sub">${sub}</p>
+        </div>
+      </header>
+      ${this._facts_([
+        [this._lessonCount(e) || null, t('discover.lessons', 'lessons')],
+        [s.estHours != null ? html`${iconClock}${s.estHours} h` : null, t('discover.of_learning', 'to learn')],
+        [s.sizeMB != null ? html`${iconDownload}${s.sizeMB} MB` : null, t('discover.download', 'download')],
+        [grade != null ? String(grade) : null, Number.isFinite(grade) ? t('discover.class', 'class') : t('discover.level', 'level')],
+      ])}
+      ${this._badges(badges)}
+      <div class="actions head-actions" style="margin-top: var(--space-3)">
+        ${this.profileId ? this._addOne(e, 'lg') : ''}
+        <button class="btn-3d btn-secondary btn-sm share-btn" @click=${() => this._share({ manifestUrl: e.manifestUrl, title: this._title(e) })}>${iconShare}<span>${t('discover.share', 'Share')}</span></button>
+      </div>
+      ${this.profileId && !this._enrolledIds.has(e.bundleId) ? html`<p class="gate-hint">${t('discover.needs_parent', 'A parent holds the button to confirm.')}</p>` : ''}
+      ${this._renderMedia(e)}
+      <div class="split">
+        <div class="main">
+          <section class="sec">
+            <h2 class="sec-title">${t('discover.about', 'About this module')}</h2>
+            ${s.blurb ? html`<p class="prose blurb-strong">${s.blurb}</p>` : ''}
+            ${s.description || m.description ? html`<p class="prose">${s.description || m.description}</p>` : ''}
+            ${this._highlights(s.highlights)}
+          </section>
+          ${lessons.length ? html`<section class="sec">
+            <h2 class="sec-title">${t('discover.lessons_title', 'Lessons')}<span class="count">${lessons.length}</span></h2>
+            ${f?.alignment ? html`<div style="margin-bottom: var(--space-3)">${this._alignLine(f.alignment)}</div>` : ''}
+            <ol class="lessons">${lessons.map((l) => html`<li>${l}</li>`)}</ol>
+          </section>` : f ? '' : html`<p class="sec loading">${t('discover.loading_lessons', 'Loading the lesson list…')}</p>`}
+        </div>
+        <aside>
+          <section class="sec">
+            <h2 class="sec-title">${t('discover.details', 'Details')}</h2>
+            <dl class="details">${details.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
+          </section>
+          ${others.length ? html`<section class="sec">
+            <h2 class="sec-title">${t('discover.more_in', 'More in {b}', { b: bTitle || t('discover.this_bundle', 'this bundle') })}</h2>
+            <div class="side-list">${others.slice(0, 6).map((x) => this._card(x))}</div>
+          </section>` : ''}
+        </aside>
+      </div>
+      ${f?.alignment ? html`<p class="indep">${t('discover.independent', INDEPENDENCE_NOTE)}</p>` : ''}
+    `;
   }
 
   render() {
-    if (this._loading) return html`<app-loader label=${t('discover.loading', 'Loading\u2026')}></app-loader>`;
-
-    const head = (sub) => html`<header class="page-head">
-      <p class="page-kicker">${t('discover.kicker', 'Course shop')}</p>
-      <h2 class="page-title">${t('discover.title', 'Discover')}</h2>
-      <p class="page-subtitle">${sub}</p>
-      ${this._fromCache ? html`<p class="catalog-offline">${t('discover.offline', 'Showing the last saved list (offline).')}</p>` : ''}
-    </header>`;
-
+    if (this._loading) return html`<app-loader label=${t('discover.loading', 'Loading…')}></app-loader>`;
     if (!this._entries.length) {
       return html`
-        ${head(t('discover.subtitle_empty', 'Browse courses your family hasn\'t added yet.'))}
+        <header class="page-head">
+          <p class="kicker">${t('discover.kicker', 'Course shop')}</p>
+          <h1 class="page-title">${t('discover.title', 'Discover')}</h1>
+        </header>
         <div class="empty-state">
           <h3>${t('discover.empty_title', 'Nothing to browse yet')}</h3>
-          <p>${t('discover.empty_body', 'No showcase courses are configured on this device yet. Ask a parent to add courses directly from Parent Dashboard \u2192 Course Content Sources.')}</p>
-        </div>
-      `;
+          <p>${t('discover.empty_body', 'No showcase courses are configured on this device yet. Ask a parent to add courses directly from Parent Dashboard → Course Content Sources.')}</p>
+        </div>`;
     }
-
-    const visible = this._visible;
-    const filtering = Object.keys(this._filters).length > 0;
-    return html`
-      ${head(t('discover.subtitle', 'Find a new course for your shelf. Adding one needs a parent.'))}
-      ${this._renderFilters()}
-      ${filtering ? '' : this._renderCollections()}
-      <section class="all">
-        <div class="section-head">
-          <h3 class="section-title">${filtering ? t('discover.matches', 'Matching courses') : t('discover.all', 'All courses')}<span class="count">${visible.length}</span></h3>
-          ${visible.length > 1 ? this._renderSort() : ''}
-        </div>
-        ${visible.length ? html`<div class="grid">
-          ${visible.map((entry, i) => {
-            const manifest = entry.manifest;
-            const tagline = this._tagline(entry);
-            const description = entry.meta?.description || (typeof manifest.description === 'string' ? manifest.description : manifest.description?.en) || '';
-            const open = this._openId === entry.bundleId;
-            const kicker = this._kicker(entry) || t('discover.course', 'Course');
-            return html`
-              <article class="card" style="animation-delay: ${Math.min(i, 8) * 40}ms">
-                <button class="cover-btn" tabindex="-1" aria-hidden="true" @click=${(ev) => this._toggleDetails(entry, ev.currentTarget)}>${this._renderCover(entry)}</button>
-                <div class="card-body">
-                  <div class="card-type">${kicker}</div>
-                  <h3>${this._title(entry)}</h3>
-                  ${tagline ? html`<p class="tagline">${tagline}</p>` : ''}
-                  ${description ? html`<p class="card-desc">${description}</p>` : ''}
-                  ${this._renderBadges(entry)}
-                  <div class="card-footer">
-                    <div class="footer-row">
-                      ${this._renderAction(entry)}
-                      <button class="btn-3d btn-secondary btn-sm" aria-expanded=${open ? 'true' : 'false'} aria-haspopup="dialog" @click=${(ev) => this._toggleDetails(entry, ev.currentTarget)}>${t('discover.more', 'Details')}</button>
-                    </div>
-                  </div>
-                </div>
-              </article>
-            `;
-          })}
-        </div>` : html`<div class="no-match"><p>${t('discover.no_match', 'No course matches these filters.')}</p>
-          <button class="chip chip-clear" @click=${() => { this._filters = {}; }}>${t('discover.filter.clear', 'Clear filters')}</button></div>`}
-      </section>
-      ${this._renderSheet()}
-    `;
+    const r = this._route();
+    if (r.kind === 'bundle') {
+      const b = this._bundles.find((x) => x.id === r.id);
+      if (b) return this._renderBundle(b);
+    } else if (r.kind === 'module') {
+      const e = this._entries.find((x) => x.id === r.id && x.manifest?.status !== 'draft');
+      if (e) return this._renderModule(e);
+    }
+    return this._renderHome();
   }
 }
 

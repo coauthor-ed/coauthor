@@ -5,6 +5,7 @@ import { UpdateManager } from './core/UpdateManager.js';
 import { EventBus } from './core/EventBus.js';
 import { appUrl } from './core/basePath.js';
 import { registerShowcaseSource } from './core/ShowcaseService.js';
+import { InstallPrompt } from './core/InstallPrompt.js';
 
 // Define custom elements
 customElements.define('app-shell', AppShell);
@@ -131,6 +132,9 @@ async function bootstrapEphemeralPreviewSource() {
   // The ?t= keeps sw.js's stale-while-revalidate cross-origin cache from serving a previous kit version of the bar.
   import(`${api.replace(/\/$/, '')}/review-bar.js?t=${Date.now()}`).catch((e) => console.warn('[preview] review bar not loaded:', e));
 })();
+
+// Chrome offers the install once, early: keep it for the add-course page (Q-53b).
+InstallPrompt.start();
 
 // Initialize Router
 registerShowcaseSource();

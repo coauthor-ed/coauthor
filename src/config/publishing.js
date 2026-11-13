@@ -8,7 +8,10 @@
  */
 export const PUBLISH_ORG = 'coauthor-ed';
 
-export const CATALOG_URL = `https://${PUBLISH_ORG}.github.io/coauthor-catalog/catalog.json`;
+/** Where the sites are served from. Any static host works: change this (node tools/publish/set-org.mjs --base-url <url>) and nothing else. */
+export const PUBLISH_BASE_URL = `https://${PUBLISH_ORG}.github.io`;
+
+export const CATALOG_URL = `${PUBLISH_BASE_URL}/coauthor-catalog/catalog.json`;
 
 /** True while PUBLISH_ORG has not been set to a real org. */
 export const PUBLISH_IS_PLACEHOLDER = PUBLISH_ORG === ['ORG', 'PLACEHOLDER'].join('-'); // split so set-org.mjs leaves this check intact

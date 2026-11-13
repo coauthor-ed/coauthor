@@ -167,6 +167,7 @@ export const CourseSourceManager = {
     for (const source of sources) {
       const manifest = source.manifest || {};
       const title = manifest.title?.en || manifest.title || source.bundleId;
+      const blurb = manifest.description?.en || (typeof manifest.description === 'string' ? manifest.description : '');
       const push = (type, relPaths) => {
         for (const relPath of relPaths || []) {
           items.push({
@@ -177,6 +178,7 @@ export const CourseSourceManager = {
             chapterId: manifest.chapterId || null,
             _remoteSource: source.bundleId,
             _remoteTitle: title,
+            _remoteDescription: blurb || null,
             _needsUpdate: needsNewerEngine(manifest),
           });
         }

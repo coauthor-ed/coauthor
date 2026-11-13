@@ -187,7 +187,7 @@ export class MarkdownRenderer extends LitElement {
       display: block;
       margin-bottom: 4px;
       font-family: var(--font-family);
-      font-size: 0.72rem;
+      font-size: 0.8rem;
       font-weight: 700;
       font-style: normal;
       letter-spacing: var(--kicker-tracking, 0.1em);
@@ -266,6 +266,10 @@ export class MarkdownRenderer extends LitElement {
        no-ops on plain inline boxes) breaks that deadlock; the element still
        snaps to its real size the moment it does render. */
     math-span { display: inline-block; min-width: 1px; }
+    /* Q-84: inline maths runs a little larger than the prose (as KaTeX's own
+       1.21em does), so its superscripts and nested fractions, drawn at 0.7 of
+       it, stay at or above 12 px in 15-16 px body text. */
+    math-span { font-size: 1.15em; }
     math-span, math-div { min-height: 1em; }
 
     /* A block ($$…$$) equation as a "card" rather than bare glyphs on the

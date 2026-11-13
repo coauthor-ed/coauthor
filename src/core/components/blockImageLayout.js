@@ -1,6 +1,6 @@
 import { html, css } from 'lit';
 import {
-  normalizeFocusRect, focusScale, focusTranslate,
+  normalizeFocusRect, focusScale, focusTranslate, cameraScale,
   focusAnchorPoint, resolveCalloutAnchor, projectFocusPoint,
 } from '../focusRect.js';
 import { openImageLightbox } from '../../ui/components/imageLightbox.js';
@@ -476,6 +476,13 @@ export const blockImageFocusStyles = css`
      region to the next, because a spotlight that teleports with no transition
      is indistinguishable from a rendering glitch, and the whole point of the
      mask is to tell the student where to look next. */
+  /* The comic camera: a slow, eased move (about a second) from one beat's
+     framing to the next, like an interactive comic turning to the next
+     panel. The whole image comes back on a beat with no rect. */
+  .cb-image-viewport.cb-cam .cb-focus-group {
+    transition: transform var(--motion-camera, 1000ms) var(--motion-camera-ease, cubic-bezier(0.45, 0, 0.25, 1));
+    will-change: transform;
+  }
   @media (prefers-reduced-motion: reduce) {
     .cb-focus-group { transition: none !important; }
     .cb-callout { transition: none !important; }
@@ -832,6 +839,182 @@ const MIN_FLOW_WIDTH_PX = 160;        // panel-side floor — no raster legibili
 const MIN_WRAP_TEXT_WIDTH_PX = 340;   // ~45ch — the wrap column while the float is tall
 
 /**
+ * Side-panel "fit at rest" helpers (Q-55, Q-57; shared with poe-predict@1 by
+ * Q-59). A side panel is sticky at header + 12 px, and _availableHeight()
+ * budgets for that STUCK position; on a fresh slide (scroll 0) the row sits
+ * lower (progress bar, gap above the row), so a panel sized to the budget
+ * ended under the fixed action bar. The rest offset is how much lower.
+ */
+
+/** The side row's top in page coordinates (where the panel sits at scroll
+ *  0), or null without a row. Depends only on what is above the row, never
+ *  on the panel's own size, so measuring it cannot loop. */
+export function measureRestTop(row) {
+  if (!row) return null;
+  return Math.round(row.getBoundingClientRect().top + (document.scrollingElement?.scrollTop || 0));
+}
+
+/** True when a new measureRestTop() reading should replace the cached one
+ *  (ignores sub-3 px jitter). */
+export function restTopChanged(prev, next) {
+  if (next === prev) return false;
+  if (next != null && prev != null && Math.abs(next - prev) < 3) return false;
+  return true;
+}
+
+/** How much lower than its sticky spot the side row sits at rest; 0 until
+ *  measured. */
+export function sideRestExtra(restTop) {
+  if (restTop == null || typeof window === 'undefined') return 0;
+  const parsed = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--lesson-sticky-header-h'));
+  const stickyTop = (Number.isFinite(parsed) ? parsed : 120) + 12;
+  return Math.max(0, restTop - stickyTop);
+}
+
+/** Shrinks a side-tier resolveImageLayout() result so the image and its
+ *  caption fit above the action bar at rest. The tier never changes, only
+ *  the width. `captionEl` is the rendered .cb-caption (null before paint). */
+export function fitSideImageAtRest(result, { naturalWidth, naturalHeight, captionEl, restExtra, availableHeight }) {
+  if (!result || (result.layout !== 'right' && result.layout !== 'left') || result.widthPx == null) return result;
+  if (!naturalWidth || !naturalHeight) return result;
+  const aspect = naturalWidth / naturalHeight;
+  const capH = captionEl ? captionEl.getBoundingClientRect().height + 6 : 0;
+  const overflow = result.widthPx / aspect + restExtra + capH - availableHeight;
+  if (overflow <= 0) return result;
+  return { ...result, widthPx: Math.max(0, result.widthPx - overflow * aspect) };
+}
+
+/**
+ * Q-60: the image fit content-block and poe-predict run (resolveImageLayout
+ * + fitSideImageAtRest), packaged as a Lit reactive controller for hosts
+ * that had none: QuestionBase and mcq-single@2. Listeners are attached only
+ * once `active()` is true (an image or a setup sim), so a question with no
+ * media pays nothing. Every listener just asks the host to re-render.
+ *
+ *   this._mediaFit = new BlockImageFitController(this, {
+ *     image: () => this._data?.image, bundleId: () => this._ctx?.bundleId,
+ *     active: () => ..., });
+ *   const fit = this._mediaFit.resolve();   // in render(), or null
+ *
+ * Questions never take the background tier (text over the picture): a
+ * picture that fits nowhere falls back to the capped tier below the text.
+ */
+export class BlockImageFitController {
+  constructor(host, { image, bundleId = () => null, active = () => !!image()?.src } = {}) {
+    this.host = host;
+    this._image = image;
+    this._bundleId = bundleId;
+    this._active = active;
+    this._dims = null;
+    this._probedSrc = null;
+    this._columnWidth = 0;
+    this._narrow = false;
+    this._shortLandscape = false;
+    this._restTop = null;
+    this._last = null;
+    this._attached = false;
+    host.addController(this);
+  }
+
+  hostConnected() {
+    if (this._wasAttached) this._attach();
+  }
+
+  hostDisconnected() {
+    this._wasAttached = this._attached;
+    this._detach();
+  }
+
+  hostUpdated() {
+    if (!this._attached && this.host.isConnected && this._active()) this._attach();
+    const layout = this._last?.layout;
+    const row = (layout === 'right' || layout === 'left')
+      ? this.host.shadowRoot?.querySelector(`.cb-layout-${layout}`) : null;
+    const next = measureRestTop(row?.querySelector(':scope > .cb-image-wrap') ? row : null);
+    if (!restTopChanged(this._restTop, next)) return;
+    this._restTop = next;
+    this.host.requestUpdate();
+  }
+
+  _attach() {
+    if (this._attached || typeof window === 'undefined') return;
+    this._attached = true;
+    const update = () => this.host.requestUpdate();
+    this._mq = window.matchMedia('(max-width: 600px)');
+    this._mqShort = window.matchMedia('(max-height: 600px) and (orientation: landscape)');
+    this._narrow = this._mq.matches;
+    this._shortLandscape = this._mqShort.matches;
+    this._onMq = () => { this._narrow = this._mq.matches; this._shortLandscape = this._mqShort.matches; update(); };
+    this._mq.addEventListener('change', this._onMq);
+    this._mqShort.addEventListener('change', this._onMq);
+    this._ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width;
+      if (w && Math.abs(w - this._columnWidth) > 1) { this._columnWidth = w; update(); }
+    });
+    this._ro.observe(this.host);
+    // A pure viewport-height change never resizes the host (see content-block.js).
+    this._onResize = () => {
+      if (this._raf) return;
+      this._raf = requestAnimationFrame(() => { this._raf = null; update(); });
+    };
+    window.addEventListener('resize', this._onResize);
+  }
+
+  _detach() {
+    if (!this._attached) return;
+    this._attached = false;
+    this._mq?.removeEventListener('change', this._onMq);
+    this._mqShort?.removeEventListener('change', this._onMq);
+    this._ro?.disconnect();
+    window.removeEventListener('resize', this._onResize);
+    if (this._raf) { cancelAnimationFrame(this._raf); this._raf = null; }
+  }
+
+  /** Same budget poe-predict uses: below the sticky head, above the action bar. */
+  availableHeight() {
+    if (typeof window === 'undefined') return Infinity;
+    const root = getComputedStyle(document.documentElement);
+    const headerH = parseFloat(root.getPropertyValue('--lesson-sticky-header-h')) || 120;
+    const footerH = parseFloat(root.getPropertyValue('--lesson-chrome-bottom')) || 0;
+    return Math.max(0, window.innerHeight - headerH - footerH - 40);
+  }
+
+  /** The layout for the image now (call from render()), or null without one. */
+  resolve() {
+    const image = this._image();
+    if (!image?.src) { this._last = null; return null; }
+    const bundleId = this._bundleId();
+    if (this._probedSrc !== image.src) {
+      this._probedSrc = image.src;
+      this._dims = null;
+      probeImageDimensions(image.src, bundleId).then((dims) => {
+        if (dims && this._probedSrc === image.src) { this._dims = dims; this.host.requestUpdate(); }
+      });
+    }
+    const availableHeight = this.availableHeight();
+    let result = resolveImageLayout({
+      positionHint: image.position || 'right',
+      naturalWidth: this._dims?.naturalWidth,
+      naturalHeight: this._dims?.naturalHeight,
+      columnWidth: this._columnWidth,
+      availableHeight,
+      isNarrow: this._narrow || this._shortLandscape,
+    });
+    if (result.layout === 'background' && image.position !== 'background') {
+      result = { layout: 'below', capped: true, zoomAffordance: true, widthPx: null };
+    }
+    this._last = fitSideImageAtRest(result, {
+      naturalWidth: this._dims?.naturalWidth,
+      naturalHeight: this._dims?.naturalHeight,
+      captionEl: this.host.shadowRoot?.querySelector('.cb-image-wrap .cb-caption'),
+      restExtra: sideRestExtra(this._restTop),
+      availableHeight,
+    });
+    return this._last;
+  }
+}
+
+/**
  * Simulation counterpart to resolveImageLayout() — see
  * docs/sprints/wip/dom-simulation-auto-layout.md §3 for the full design.
  * No async-probe state (a DomSimulation's aspect ratio is known
@@ -941,23 +1124,28 @@ export function resolveSimLayout({
  */
 export function renderBlockImageViewport(image, focus, opts = {}) {
   if (!image?.src) return html``;
-  const { capped = false, zoomAffordance = false, pop = false, widthPx = null, bundleId = null } = opts;
+  const { capped = false, zoomAffordance = false, pop = false, widthPx = null, bundleId = null, camera = false } = opts;
   const rect = normalizeFocusRect(focus);
-  const opaqueClass = focus?.opaque ? 'cb-mask-opaque' : '';
+  const opaqueClass = !camera && focus?.opaque ? 'cb-mask-opaque' : '';
+  // Camera mode (reveal.focusMode "camera"): the same group, panned and zoomed
+  // onto the rect like a comic panel, with no spotlight and no callout. The
+  // viewport is always rendered (even on a beat with no rect), so Lit only
+  // changes the style and the CSS transition carries the move.
+  const groupStyle = camera ? cameraTransform(rect) : focusTransform(rect, focus?.opaque);
   return html`
     <div class="cb-image-wrap ${capped ? 'cb-image-capped' : ''} ${pop ? 'cb-media-pop' : ''}"
          style="${widthPx ? `max-width:${Math.round(widthPx)}px` : ''}">
-      <div class="cb-image-viewport ${rect ? 'cb-focused' : ''} ${opaqueClass}">
-        <div class="cb-focus-group" style="${focusTransform(rect, focus?.opaque)}">
+      <div class="cb-image-viewport ${rect && !camera ? 'cb-focused' : ''} ${camera ? 'cb-cam' : ''} ${opaqueClass}">
+        <div class="cb-focus-group" style="${groupStyle}">
           <img
             src="${CourseSourceManager.resolveRef(image.src, bundleId)}"
             alt="${image.alt || ''}"
             loading="lazy"
             decoding="async"
           >
-          <div class="cb-focus-mask" style="${focusMaskStyle(rect)}"></div>
+          <div class="cb-focus-mask" style="${camera ? 'display: none;' : focusMaskStyle(rect)}"></div>
         </div>
-        ${renderFocusCallout(rect, focus)}
+        ${camera ? '' : renderFocusCallout(rect, focus)}
       </div>
       ${zoomAffordance ? renderZoomTrigger(image, bundleId) : ''}
       ${imageCaptionText(image) ? html`<span class="cb-caption">${imageCaptionText(image)}</span>` : ''}
@@ -972,6 +1160,14 @@ function focusTransform(rect, opaque = false) {
   const { tx, ty } = focusTranslate(rect, s, opaque);
   
   if (s === 1 && tx === 0 && ty === 0) return 'transform: none;';
+  return `transform: scale(${s.toFixed(3)}) translate(${(tx * 100).toFixed(3)}%, ${(ty * 100).toFixed(3)}%);`;
+}
+
+/** The comic camera's pan and zoom: cameraScale, then the same clamped centring. */
+function cameraTransform(rect) {
+  const s = cameraScale(rect);
+  if (!rect || !(s > 1)) return 'transform: none;';
+  const { tx, ty } = focusTranslate(rect, s);
   return `transform: scale(${s.toFixed(3)}) translate(${(tx * 100).toFixed(3)}%, ${(ty * 100).toFixed(3)}%);`;
 }
 

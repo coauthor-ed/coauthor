@@ -12,11 +12,25 @@
  * - the Konami code (up up down down left right left right b a): a meteor
  *   shower over the hero, and Quill cheers.
  *
+ * Rest (D27, battery): the hero's ambient loops (sky twinkle, comet,
+ * aurora, the fish, his breathing, the headline gleam) run for SKY_REST_MS
+ * of on-screen time, then each finishes the cycle it is in and holds its
+ * last frame (a slow drift stops where it is), and his idle acts stop.
+ * A tap or key in the hero, an egg, or the hero coming back on screen
+ * wakes them for another round. The resting frame is each loop's own
+ * start/end frame, so the still page looks the same as before.
+ *
  * Under prefers-reduced-motion every egg is a face and a line in his
  * bubble, nothing moves, and there is no idle loop. All DOM here is the
  * landing view's own; Quill himself is driven only through his public
  * methods (perform, look, setExpression).
  */
+
+// On-screen time the hero's loops run before they rest (D27).
+export const SKY_REST_MS = 20000;
+// A loop with a longer cycle than this (the aurora's 40 s drift) stops
+// where it is instead of finishing its cycle.
+const LONG_LOOP_MS = 12000;
 
 const KONAMI = ['ArrowUp', 'ArrowUp', 'ArrowDown', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'b', 'a'];
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -43,6 +57,11 @@ export class HeroQuill {
     this._beat = 0;
     this._onKey = this._onKey.bind(this);
     this._onFishJump = this._onFishJump.bind(this);
+    this._rested = false;
+    this._wound = new Map(); // animation -> its own fill, while resting
+    this._owned = new Set(); // woken from finished: their play state is ours now, not the CSS's
+    this.wake = this.wake.bind(this);
+    this._syncOwned = this._syncOwned.bind(this);
   }
 
   attach(root) {
@@ -57,14 +76,96 @@ export class HeroQuill {
     this.moon = $('.moon-hit');
     this.fishArc?.addEventListener('animationiteration', this._onFishJump);
     window.addEventListener('keydown', this._onKey);
-    if (!this.reduced) this._schedule();
+    if (!this.reduced) {
+      this._schedule();
+      this.hero?.addEventListener('pointerdown', this.wake);
+      document.addEventListener('visibilitychange', this._syncOwned);
+      // The section observer toggles [data-live]: coming back on screen wakes.
+      if (this.hero && typeof MutationObserver === 'function') {
+        this._live = this.hero.hasAttribute('data-live');
+        this._mo = new MutationObserver(() => {
+          const live = this.hero.hasAttribute('data-live');
+          if (live && !this._live) this.wake();
+          this._live = live;
+          this._syncOwned();
+        });
+        this._mo.observe(this.hero, { attributes: true, attributeFilter: ['data-live'] });
+      }
+      this._armRest();
+    }
   }
 
   detach() {
     clearTimeout(this._idleTimer);
     clearTimeout(this._glanceTimer);
+    clearTimeout(this._restTimer);
+    this._mo?.disconnect();
+    this.hero?.removeEventListener('pointerdown', this.wake);
+    document.removeEventListener('visibilitychange', this._syncOwned);
     this.fishArc?.removeEventListener('animationiteration', this._onFishJump);
     window.removeEventListener('keydown', this._onKey);
+  }
+
+  /* ---- rest (D27) -------------------------------------------------------- */
+
+  /** The hero's own CSS loops (not those inside <quill-mascot>, which rests itself). */
+  _loops() {
+    const all = this.root?.getAnimations?.() || [];
+    return all.filter((a) => {
+      const t = a.effect?.target;
+      return t && this.hero.contains(t) && (a.effect.getTiming().iterations === Infinity || this._wound.has(a));
+    });
+  }
+
+  _armRest() {
+    clearTimeout(this._restTimer);
+    this._restTimer = setTimeout(() => this._rest(), SKY_REST_MS);
+  }
+
+  /** Each loop ends its cycle (or, a long drift, stops where it is) and holds that frame. */
+  _rest() {
+    if (!this._awake) { this._armRest(); return; } // nobody saw the round: try later
+    for (const a of this._loops()) {
+      const t = a.effect.getComputedTiming();
+      if (t.iterations !== Infinity) continue;
+      const it = t.currentIteration ?? 0;
+      // Raw position in the cycle (before direction and easing), so a
+      // stopped alternate drift holds exactly the frame it shows now.
+      const raw = Math.min(0.999, Math.max(0, ((t.localTime ?? 0) - (t.delay ?? 0)) / t.duration - it));
+      const end = t.duration > LONG_LOOP_MS ? it + raw : it + 1;
+      this._wound.set(a, a.effect.getTiming().fill);
+      a.effect.updateTiming({ iterations: Math.max(end, 0.0001), fill: 'forwards' });
+    }
+    this._rested = true;
+  }
+
+  /** Another round: a tap or key in the hero, an egg, the hero back on screen. */
+  wake() {
+    if (this.reduced) return;
+    this.q?.wake?.();
+    if (this._rested) {
+      this._rested = false;
+      for (const [a, fill] of this._wound) {
+        const done = a.playState === 'finished';
+        a.effect.updateTiming({ iterations: Infinity, fill });
+        // Still in its last cycle: it simply carries on, still under the
+        // CSS play state. A finished one must be played again, from the
+        // frame it holds, and from then on paused off-screen by us.
+        if (done) { this._owned.add(a); a.play(); }
+      }
+      this._wound.clear();
+      this._syncOwned();
+    }
+    this._armRest();
+  }
+
+  /** Woken loops pause off-screen and in a hidden tab, as the CSS ones do. */
+  _syncOwned() {
+    const run = this._awake;
+    for (const a of this._owned) {
+      if (run && a.playState === 'paused') a.play();
+      else if (!run && a.playState === 'running') a.pause();
+    }
   }
 
   get _awake() {
@@ -79,7 +180,7 @@ export class HeroQuill {
   }
 
   _idle() {
-    if (!this._awake || this.busy || !this.q) return;
+    if (!this._awake || this.busy || !this.q || this._rested) return;
     const beat = this._beat++ % 5;
     if (beat === 0 || beat === 3) this._glance(rand(-1, -0.6), rand(0.2, 0.7), 1400); // at the water
     else if (beat === 1) this._glance(rand(-0.3, 0.6), -1, 1200); // at the sky
@@ -111,6 +212,7 @@ export class HeroQuill {
 
   /** A tap is the user asking, so it skips the ambient budget (force). */
   async tap(act, nth) {
+    this.wake();
     if (this.busy || !this.q) return false;
     if (nth === 2) this.say('Psst. I love fish. Is there one in the water?', 4200);
     return this.q.perform(act, { force: true });
@@ -119,6 +221,7 @@ export class HeroQuill {
   /* ---- egg: feed Quill a fish --------------------------------------------- */
 
   async feed(fromEl) {
+    this.wake();
     if (this.busy || !this.q) return;
     this.busy = true;
     this.fed++;
@@ -184,6 +287,7 @@ export class HeroQuill {
   /* ---- egg: the moon goes round the planet -------------------------------- */
 
   async orbit() {
+    this.wake();
     if (this.busy || !this.moon) return;
     this.busy = true;
     try {
@@ -238,6 +342,7 @@ export class HeroQuill {
 
   async shower() {
     if (!this.hero) return;
+    this.wake();
     if (this.hero.getBoundingClientRect().bottom < 200) {
       window.scrollTo({ top: 0, behavior: this.reduced ? 'auto' : 'smooth' });
       await wait(this.reduced ? 0 : 700);

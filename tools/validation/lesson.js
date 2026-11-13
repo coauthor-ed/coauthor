@@ -51,6 +51,15 @@ export function validateLesson(lessonData, curriculum = null) {
     if (!Array.isArray(lessonData.blocks)) {
       errors.push('Lesson must have either a flow or a blocks array');
     }
+    else {
+      lessonData.blocks.forEach((b, i) => {
+        if (typeof b === 'string') {
+          warnings.push(`blocks[${i}] is a bare string; write { "blockRef": "${b}" } (the engine accepts both)`);
+        } else if (!b || typeof b !== 'object' || (!b.blockRef && !b.type)) {
+          errors.push(`blocks[${i}] has neither blockRef nor an inline type`);
+        }
+      });
+    }
   }
 
   // Optional narration sidecar ref (coauthor-narration@1). Bundle-relative.

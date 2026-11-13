@@ -145,7 +145,7 @@ customElements.define('app-wordmark', AppWordmark);
 // ── the slots ────────────────────────────────────────────────────────────
 
 // Attributes passed through to the child (all the brand pieces' public ones).
-const FORWARD = ['size', 'label', 'inline', 'expression', 'act', 'idle', 'track-pointer', 'seed', 'subject', 'heading', 'variant'];
+const FORWARD = ['size', 'label', 'inline', 'expression', 'act', 'idle', 'track-pointer', 'rest-after', 'seed', 'subject', 'heading', 'variant'];
 // The ones the neutral fallbacks understand.
 const FALLBACK_FORWARD = ['size', 'label', 'inline'];
 // Properties passed through (template property bindings, e.g. .lines=${...}).

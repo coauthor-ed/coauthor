@@ -4,7 +4,7 @@
 // stale-while-revalidate and serves a cached copy immediately, catching up to
 // new JSON on the NEXT load. A returning student would otherwise run the old
 // engine against new content.
-const CACHE_NAME = 'coauthor-shell-v192';
+const CACHE_NAME = 'coauthor-shell-v234';
 // Bumped alongside CACHE_NAME here: catalog.json removal changed
 // HomeDashboard.js/TestDashboard.js's fetch behavior, but stale-while-
 // revalidate (see staleWhileRevalidate() below) serves whatever's already
@@ -56,6 +56,7 @@ const SHELL_ASSETS = [
   'assets/icons/favicon-32.png',
   'vendor/lit.js',
   'vendor/idb.js',
+  'vendor/qrcode.js',
   'vendor/marked.esm.js',
   'src/app.js',
   'src/ui/AppShell.js',
@@ -72,6 +73,10 @@ const SHELL_ASSETS = [
   'src/core/mountPlugin.js',
   'src/core/CourseSourceManager.js',
   'src/core/AssetPrefetcher.js',
+  'src/core/OfflinePrefetcher.js',
+  'src/core/shareLinks.js',
+  'src/core/InstallPrompt.js',
+  'src/core/mathliveConfig.js',
   'src/core/LoadingIndicator.js',
   'src/core/markdown/mathMask.js',
   'src/core/markdown/splitSteps.js',
@@ -83,6 +88,7 @@ const SHELL_ASSETS = [
   'src/core/mixins/GamificationMixin.js',
   'src/core/mixins/LookMixin.js',
   'src/core/components/stageAnswer.js',
+  'src/core/components/narrationCover.js',
   'src/looks/quill/reactor.js',
   'src/looks/quill/stage.js',
   'src/looks/quill/brand.js',
@@ -107,6 +113,7 @@ const SHELL_ASSETS = [
   'vendor/fonts/source-sans-3/source-sans-3-sups-wght-normal.woff2',
   'vendor/fonts/source-serif-4/source-serif-4-sups-wght-normal.woff2',
   'src/ui/components/LookSlots.js',
+  'src/ui/components/ShareSheet.js',
   'src/ui/pageChange.js',
   'src/ui/components/QuillMascot.js',
   'src/core/quill/QuillRig.js',
@@ -149,7 +156,10 @@ const SHELL_ASSETS = [
   'src/core/ShowcaseService.js',
   'src/core/SimViewPrefs.js',
   'src/core/SimulationLoader.js',
+  'src/core/discoverNudge.js',
   'src/core/ThemeManager.js',
+  'src/core/themePref.js',
+  'src/core/themeBoot.js',
   'src/core/UpdateManager.js',
   'src/core/basePath.js',
   'src/core/components/PluginErrorBoundary.js',
@@ -179,6 +189,7 @@ const SHELL_ASSETS = [
   'src/ui/icons/uiIcons.js',
   'src/ui/sharedStyles.js',
   'src/ui/views/HomeDashboard.js',
+  'src/ui/views/AddCourseView.js',
   'src/ui/views/LessonSession.js',
   'src/ui/views/ModuleDashboard.js',
   'src/ui/views/CourseDashboard.js',
@@ -263,7 +274,10 @@ function staleWhileRevalidate(request, cacheName) {
 //   full GET fills the cache in the background for next time.
 // - cross-origin: not intercepted at all (an <audio> no-cors fetch is
 //   opaque; slicing or caching it is not possible here).
-// Not precached: only a file a learner actually played is stored.
+// Not precached: a file a learner played is stored, and OfflinePrefetcher
+// asks for every clip of an opened lesson with a plain GET (no Range). That
+// plain GET is answered from the one network fetch and cached from it, so a
+// prefetched clip is downloaded once, not twice.
 const AUDIO_EXT = /\.(mp3|m4a|aac|ogg|oga|opus|wav|weba)$/i;
 const audioFilling = new Set();
 
@@ -309,8 +323,28 @@ function handleAudio(event, url) {
   const req = event.request;
   const href = url.origin + url.pathname + url.search;
   const hit = caches.open(CONTENT_CACHE).then((c) => c.match(href)).catch(() => undefined);
+  const range = req.headers.get('Range');
+  if (!range) {
+    let stored;
+    const storing = new Promise((resolve) => { stored = resolve; });
+    event.waitUntil(storing);
+    const full = hit.then((cached) => { if (cached) { stored(); return cached; } return fetch(req).then((res) => {
+      if (res.status === 200 && !audioFilling.has(href)) {
+        const copy = res.clone();
+        audioFilling.add(href);
+        caches.open(CONTENT_CACHE).then((c) => c.put(href, copy)).catch(() => {})
+          .finally(() => { audioFilling.delete(href); stored(); });
+      } else {
+        stored();
+      }
+      return res;
+    }); });
+    full.catch(() => stored());
+    event.respondWith(full.catch(() => new Response(null, { status: 503, statusText: 'Service Unavailable' })));
+    return;
+  }
   event.respondWith(
-    hit.then((cached) => (cached ? rangeFromCached(cached, req.headers.get('Range')) : fetch(req)))
+    hit.then((cached) => (cached ? rangeFromCached(cached, range) : fetch(req)))
       .catch(() => new Response(null, { status: 503, statusText: 'Service Unavailable' }))
   );
   event.waitUntil(hit.then((cached) => (cached ? null : fillAudioCache(href))));
@@ -318,6 +352,11 @@ function handleAudio(event, url) {
 
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
+
+  // Store-page screencasts (Discover): video is never intercepted or cached.
+  // It streams from the network with its Range header intact; offline, the
+  // poster image stays and the clip simply does not play.
+  if (event.request.destination === 'video' || /\.(mp4|webm|m4v)$/i.test(url.pathname)) return;
 
   if (isAudioRequest(event.request, url)) {
     if (url.origin === self.location.origin && !url.pathname.startsWith(BASE + '_api/')) handleAudio(event, url);
